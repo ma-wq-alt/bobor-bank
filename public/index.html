@@ -60,7 +60,6 @@ const TTFBL_PER_RUB=10, RUB_PER_TTFBL=0.1;
 const FIAT={RUB:1,USD:90,TRY:2.8,KZT:0.2};
 const CUR=['TTFBL','RUB','USD','TRY','KZT'];
 const DEC={RUB:2,USD:2,TRY:2,KZT:2,TTFBL:0};
-const START=3075;
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
@@ -75,7 +74,7 @@ function input(ph,val,on,type){const i=document.createElement('input');i.placeho
 function sel(cur,fn){const s=document.createElement('select');for(const c of CUR){const o=document.createElement('option');o.value=c;o.textContent=c;if(c===cur)o.selected=true;s.appendChild(o);}s.onchange=()=>fn(s.value);return s;}
 function clear(n){while(n.firstChild)n.removeChild(n.firstChild);}
 
-let ws=null, me=null, accounts={}, screen='dashboard', allUsers=[], adminUsers=[], chatHistory=[], activeChat=null, lastHistory=[], convertState={from:'TTFBL',to:'RUB',amt:'100'}, toastText='', historyLoaded=false, askSecretForEmail=null;
+let ws=null, me=null, accounts={}, screen='dashboard', allUsers=[], adminUsers=[], chatHistory=[], activeChat=null, lastHistory=[], convertState={from:'TTFBL',to:'RUB',amt:'100'}, toastText='', historyLoaded=false;
 let savedEmail=localStorage.getItem('bobor_email'), savedSecret=localStorage.getItem('bobor_secret');
 
 function showToast(t){toastText=t;render();setTimeout(()=>{if(toastText===t){toastText='';render();}},3000);}
@@ -87,7 +86,7 @@ function connect(){
   ws.onclose=()=>{showToast('Нет соединения...');setTimeout(connect,2000);};
   ws.onerror=()=>{};
   ws.onmessage=(ev)=>{
-    let m=JSON.parse(ev.data);
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
     if(m.type==='state'){me=m.user;accounts=m.accounts;screen='dashboard';localStorage.setItem('bobor_email',me.email);render();}
     else if(m.type==='loggedout'){me=null;localStorage.clear();render();}
     else if(m.type==='users_list'){allUsers=m.users;render();}
@@ -98,7 +97,6 @@ function connect(){
     }
     else if(m.type==='admin_allusers'){adminUsers=m.users;render();}
     else if(m.type==='history'){lastHistory=m.txs;historyLoaded=true;render();}
-    else if(m.type==='ask_secret'){askSecretForEmail=savedEmail;render();}
     else if(m.type==='error'){showToast('❌ '+m.message);}
     else if(m.type==='toast'){showToast(m.message);}
   };
@@ -108,18 +106,12 @@ function send(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));else sh
 function drawLogin(){
   const app=document.getElementById('app');clear(app);
   const c=h('div','card'); c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
-  if(askSecretForEmail){
-    c.appendChild(h('div','muted','Придумайте секретное слово для '+askSecretForEmail));
-    let sec=''; c.appendChild(input('Секретное слово','',v=>sec=v,'password'));
-    c.appendChild(btn('Сохранить','btn',()=>{localStorage.setItem('bobor_secret',sec);send({type:'login',email:askSecretForEmail,secret:sec});}));
-  } else {
-    let email=savedEmail||'', pwd='', secret='';
-    c.appendChild(input('Email',email,v=>email=v,'email'));
-    c.appendChild(input('Пароль','',v=>pwd=v,'password'));
-    c.appendChild(input('Секретное слово','',v=>secret=v,'password'));
-    c.appendChild(btn('Войти','btn',()=>{localStorage.setItem('bobor_secret',secret);send({type:'login',email,pwd,secret});}));
-    c.appendChild(btn('Зарегистрироваться','btn3',()=>{screen='register';render();}));
-  }
+  let email=savedEmail||'', pwd='', secret='';
+  c.appendChild(input('Email',email,v=>email=v,'email'));
+  c.appendChild(input('Пароль','',v=>pwd=v,'password'));
+  c.appendChild(input('Секретное слово','',v=>secret=v,'password'));
+  c.appendChild(btn('Войти','btn',()=>{localStorage.setItem('bobor_secret',secret);send({type:'login',email,pwd,secret});}));
+  c.appendChild(btn('Зарегистрироваться','btn3',()=>{screen='register';render();}));
   app.appendChild(c);
 }
 

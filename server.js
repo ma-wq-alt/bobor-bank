@@ -33,7 +33,11 @@ function convertMinor(m, f, t) {
 function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 8999999999); }
 
 async function initSchema() {
+  // ВРЕМЕННЫЙ КОД: удаляем сломанную таблицу при запуске
+  try { await db.execute('DROP TABLE IF EXISTS messages'); } catch(e) { console.log('drop messages:', e.message); }
+
   await db.batch([
+    `CREATE TABLE IF NOT EXISTS users ...
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,

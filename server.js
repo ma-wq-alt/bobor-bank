@@ -20,6 +20,7 @@ const START_TTFBL = 3075;
 const TX_FEE_PCT = 1;
 const ADMIN_EMAIL = 'mar.maks999@gmail.com';
 const ADMIN_PASS = '1495';
+const NEWS_CHANNEL_ID = 'news_channel';
 
 function toMinor(v, c) { return Math.round(Number(v) * Math.pow(10, DEC[c])); }
 function fromMinor(m, c) { return m / Math.pow(10, DEC[c]); }
@@ -36,8 +37,10 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, from_email TEXT NOT NULL, to_email TEXT, text TEXT NOT NULL, date TEXT NOT NULL)`
   ]);
 
+  try { await db.execute('ALTER TABLE users ADD COLUMN banned_until TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN secret_word TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
@@ -72,7 +75,7 @@ async function getUser(email) {
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
   for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, accounts, has_secret: !!u.secret_word };
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word };
 }
 
 async function checkBonuses() {
@@ -96,7 +99,6 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const clients = new Set();
 
-// Рассылка списка всех пользователей и тех, кто онлайн
 async function broadcastUsers() {
   const users = await db.execute('SELECT email, display_name, name FROM users');
   const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
@@ -108,9 +110,7 @@ async function broadcastUsers() {
   })).sort((a,b) => a.name.localeCompare(b.name));
   
   const data = JSON.stringify({ type: 'users_list', users: list });
-  for (const c of clients) {
-    if (c.readyState === 1) c.send(data);
-  }
+  for (const c of clients) if (c.readyState === 1) c.send(data);
 }
 
 wss.on('connection', (ws) => {
@@ -128,9 +128,6 @@ async function pushStateTo(ws, email) {
   const u = await getUser(email);
   if (u) ws.send(JSON.stringify({ type: 'state', user: u, accounts: u.accounts }));
   return u;
-}
-async function pushStateByEmail(email) {
-  for (const c of clients) if (c.userEmail === email && c.readyState === 1) await pushStateTo(c, email);
 }
 
 async function handle(ws, msg) {
@@ -176,13 +173,49 @@ async function handle(ws, msg) {
   if (!me) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
 
   if (msg.type === 'refresh') return pushStateTo(ws, ws.userEmail);
-  
   if (msg.type === 'get_users') return broadcastUsers();
 
   if (msg.type === 'logout') {
     ws.userEmail = null;
     broadcastUsers();
     return ws.send(JSON.stringify({ type: 'loggedout' }));
+  }
+
+  if (['convert','transfer','vault_deposit','vault_withdraw','send_msg'].includes(msg.type)) {
+    if (me.banned_until && new Date(me.banned_until) > new Date()) {
+      return ws.send(JSON.stringify({ type: 'error', message: 'Вы забанены до ' + new Date(me.banned_until).toLocaleString('ru-RU') }));
+    }
+  }
+
+  if (msg.type === 'get_chat') {
+    const { chat_id } = msg;
+    const r = await db.execute({ sql: 'SELECT * FROM messages WHERE chat_id = ? ORDER BY id ASC LIMIT 100', args: [chat_id] });
+    return ws.send(JSON.stringify({ type: 'chat_history', chat_id, messages: r.rows }));
+  }
+
+  if (msg.type === 'send_msg') {
+    const { chat_id, to_email, text } = msg;
+    if (!text || text.trim() === '') return;
+    
+    if (chat_id === NEWS_CHANNEL_ID && me.email !== ADMIN_EMAIL) {
+      return ws.send(JSON.stringify({ type: 'error', message: 'Писать в канал может только владелец' }));
+    }
+
+    const now = new Date().toISOString();
+    await db.execute({
+      sql: 'INSERT INTO messages (chat_id, from_email, to_email, text, date) VALUES (?, ?, ?, ?, ?)',
+      args: [chat_id, me.email, to_email || null, text.trim(), now]
+    });
+
+    const data = JSON.stringify({ type: 'new_message', chat_id, from_email: me.email, to_email: to_email || null, text: text.trim(), date: now, from_name: me.display_name });
+    
+    for (const c of clients) {
+      if (c.readyState === 1) {
+        if (chat_id === NEWS_CHANNEL_ID) c.send(data);
+        else if (c.userEmail === me.email || c.userEmail === to_email) c.send(data);
+      }
+    }
+    return;
   }
 
   if (msg.type === 'vault_deposit') {
@@ -240,9 +273,12 @@ async function handle(ws, msg) {
     await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [me.email, target.email, cur, m, fee, 'Перевод', new Date().toLocaleString('ru-RU')] });
     await pushStateTo(ws, ws.userEmail);
     ws.send(JSON.stringify({ type: 'toast', message: `Переведено ${m} ${cur} → ${target.email}` }));
-    await pushStateByEmail(target.email);
+    
     for (const c of clients) {
-      if (c.userEmail === target.email && c.readyState === 1) c.send(JSON.stringify({ type: 'toast', message: `Получено ${m} ${cur} от ${me.display_name}` }));
+      if (c.userEmail === target.email && c.readyState === 1) {
+        pushStateTo(c, target.email);
+        c.send(JSON.stringify({ type: 'toast', message: `Получено ${m} ${cur} от ${me.display_name}` }));
+      }
     }
     return;
   }
@@ -270,8 +306,21 @@ async function handle(ws, msg) {
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, NULL, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: списание', new Date().toLocaleString('ru-RU')] });
     }
     await pushStateTo(ws, ws.userEmail);
-    await pushStateByEmail(target.email);
+    for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
     return;
+  }
+
+  if (msg.type === 'admin_ban') {
+    if (me.role !== 'admin') return;
+    const { targetEmail, hours } = msg;
+    let banned_until = null;
+    if (hours > 0) {
+      const d = new Date();
+      d.setHours(d.getHours() + hours);
+      banned_until = d.toISOString();
+    }
+    await db.execute({ sql: 'UPDATE users SET banned_until = ? WHERE email = ?', args: [banned_until, targetEmail] });
+    for (const c of clients) if (c.userEmail === targetEmail) pushStateTo(c, targetEmail);
   }
 
   if (msg.type === 'admin_role') {
@@ -280,19 +329,17 @@ async function handle(ws, msg) {
     if (role !== 'admin' && role !== 'user') return ws.send(JSON.stringify({ type: 'error', message: 'Роль не та' }));
     await db.execute({ sql: 'UPDATE users SET role = ? WHERE email = ?', args: [role, targetEmail] });
     await pushStateTo(ws, ws.userEmail);
-    await pushStateByEmail(targetEmail);
-    return;
   }
 
   if (msg.type === 'admin_allusers') {
     if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    const users = await db.execute('SELECT email, name, display_name, role FROM users');
+    const users = await db.execute('SELECT email, name, display_name, role, banned_until FROM users');
     const result = [];
     for (const row of users.rows) {
       const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
       const accounts = {};
       for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-      result.push({ email: row.email, name: row.display_name || row.name, role: row.role, accounts });
+      result.push({ email: row.email, name: row.display_name || row.name, role: row.role, banned_until: row.banned_until, accounts });
     }
     return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));
   }

@@ -77,9 +77,10 @@ function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText==
 function connect() {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + window.location.host + '/');
+  
   ws.onopen = () => { console.log('WS connected'); render(); };
-  ws.onclose = () => { showToast('Нет соединения, переподключаюсь...'); setTimeout(connect, 2000); };
-  ws.onerror = () => {};
+  ws.onclose = () => { console.log('WS closed'); showToast('Нет соединения, переподключаюсь...'); setTimeout(connect, 2000); };
+  ws.onerror = (err) => { console.log('WS error', err); };
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'state') { me = m.user; accounts = m.accounts; screen = 'dashboard'; render(); }
@@ -92,14 +93,12 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// ===== LOGIN/REGISTER =====
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
   c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
   c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
   c.appendChild(h('div','muted','Вход в аккаунт'));
-  c.appendChild(h('span','save','● WebSocket: онлайн'));
   let email='', pwd='';
   c.appendChild(input('Email', '', v=>email=v, 'email'));
   c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
@@ -124,7 +123,6 @@ function drawRegister() {
   app.appendChild(c);
 }
 
-// ===== DASHBOARD =====
 function drawDashboard() {
   const app = document.getElementById('app'); clear(app);
   const header = h('div','card');
@@ -201,7 +199,6 @@ function drawWalletBody(app) {
   app.appendChild(c);
 }
 
-// ===== CONVERT =====
 function drawConvertBody(app) {
   const st = convertState;
   const c = h('div','card');
@@ -240,7 +237,6 @@ function drawConvertBody(app) {
   app.appendChild(c);
 }
 
-// ===== TRANSFER =====
 function drawTransferBody(app) {
   const c = h('div','card');
   c.appendChild(h('h2',null,'Перевод другому пользователю'));
@@ -256,7 +252,6 @@ function drawTransferBody(app) {
   app.appendChild(c);
 }
 
-// ===== TTFBL =====
 function drawTtfblBody(app) {
   const t = accounts.TTFBL.bal;
   const c1 = h('div','card ttfbl');
@@ -274,7 +269,6 @@ function drawTtfblBody(app) {
   app.appendChild(c2);
 }
 
-// ===== HISTORY =====
 function drawHistoryBody(app) {
   const c = h('div','card');
   c.appendChild(h('h2',null,'История операций'));
@@ -298,7 +292,6 @@ function drawHistoryBody(app) {
   app.appendChild(c);
 }
 
-// ===== ADMIN =====
 function drawAdminBody(app) {
   if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
 
@@ -365,7 +358,6 @@ function drawAdminBody(app) {
   app.appendChild(c);
 }
 
-// ===== RENDER =====
 function render() {
   const app = document.getElementById('app');
   if(!app) return;
@@ -382,7 +374,6 @@ function render() {
   }
 }
 
-// ===== START =====
 window.onerror = function(msg, url, line){
   const e = document.getElementById('err');
   e.style.display='block';
@@ -390,3 +381,6 @@ window.onerror = function(msg, url, line){
 };
 
 connect();
+</script>
+</body>
+</html>

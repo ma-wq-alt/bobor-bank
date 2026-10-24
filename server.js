@@ -117,18 +117,11 @@ const clients = new Set();
 async function broadcastUsers() {
   const users = await db.execute('SELECT email, display_name, name, avatar FROM users');
   const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
-  
   const list = users.rows.map(r => ({ 
-    email: r.email, 
-    name: r.display_name || r.name,
-    avatar: r.avatar,
-    online: onlineEmails.includes(r.email)
+    email: r.email, name: r.display_name || r.name, avatar: r.avatar, online: onlineEmails.includes(r.email)
   })).sort((a,b) => a.name.localeCompare(b.name));
-  
   const data = JSON.stringify({ type: 'users_list', users: list });
-  for (const c of clients) {
-    if (c.readyState === 1) c.send(data);
-  }
+  for (const c of clients) if (c.readyState === 1) c.send(data);
 }
 
 wss.on('connection', (ws) => {
@@ -169,7 +162,6 @@ async function handle(ws, msg) {
     const { email, pwd, secret, auto } = msg;
     const u = await getUser(email || '');
     if (!u) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный email или пароль' }));
-    
     const check = await db.execute({ sql: 'SELECT pwd, secret_word FROM users WHERE email = ?', args: [u.email] });
     const dbSecret = check.rows[0].secret_word;
     
@@ -184,7 +176,6 @@ async function handle(ws, msg) {
         if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
       }
     }
-    
     if (u.banned) return ws.send(JSON.stringify({ type: 'error', message: 'Вы забанены!' }));
 
     ws.userEmail = u.email;
@@ -206,35 +197,62 @@ async function handle(ws, msg) {
     return ws.send(JSON.stringify({ type: 'loggedout' }));
   }
 
+  // Загрузка списка чатов (как в вотсапе)
+  if (msg.type === 'get_chats') {
+    const r = await db.execute({
+      sql: `SELECT DISTINCT 
+              CASE WHEN from_email = ? THEN to_email ELSE from_email END as chat_email 
+            FROM messages 
+            WHERE from_email = ? OR to_email = ?`,
+      args: [me.email, me.email, me.email]
+    });
+    const chatEmails = r.rows.map(row => row.chat_email);
+    const chats = [];
+    for (const ce of chatEmails) {
+      const u = await getUser(ce);
+      if (u) chats.push({ email: u.email, name: u.display_name, avatar: u.avatar });
+    }
+    return ws.send(JSON.stringify({ type: 'chats_list', chats }));
+  }
+
   if (msg.type === 'get_history') {
     const { withEmail } = msg;
-    let r;
-    if (withEmail === 'GLOBAL') {
-       r = await db.execute({ sql: `SELECT * FROM messages WHERE to_email = 'GLOBAL' ORDER BY id ASC` });
-    } else {
-       r = await db.execute({ 
-         sql: `SELECT * FROM messages WHERE (from_email = ? AND to_email = ?) OR (from_email = ? AND to_email = ?) ORDER BY id ASC`, 
-         args: [me.email, withEmail, withEmail, me.email] 
-       });
-    }
+    const r = await db.execute({ 
+      sql: `SELECT * FROM messages WHERE (from_email = ? AND to_email = ?) OR (from_email = ? AND to_email = ?) ORDER BY id ASC`, 
+      args: [me.email, withEmail, withEmail, me.email] 
+    });
     return ws.send(JSON.stringify({ type: 'chat_history', withEmail, messages: r.rows }));
   }
 
   if (msg.type === 'send_message') {
     const { toEmail, text } = msg;
     if (!text || text.trim() === '') return;
-    
-    if (toEmail === 'GLOBAL' && me.role !== 'admin') {
-      return ws.send(JSON.stringify({ type: 'error', message: 'Писать в Новости может только админ!' }));
-    }
-
     const now = new Date().toLocaleString('ru-RU');
     await db.execute({ sql: 'INSERT INTO messages (from_email, to_email, text, date) VALUES (?, ?, ?, ?)', args: [me.email, toEmail, text, now] });
     
     for (const c of clients) {
-      if (toEmail === 'GLOBAL' || c.userEmail === me.email || c.userEmail === toEmail) {
-        if (c.readyState === 1) c.send(JSON.stringify({ type: 'new_message', from: me.email, to: toEmail, text, date: now }));
+      if ((c.userEmail === me.email || c.userEmail === toEmail) && c.readyState === 1) {
+        c.send(JSON.stringify({ type: 'new_message', from: me.email, to: toEmail, text, date: now }));
       }
+    }
+    return;
+  }
+
+  // Главный чат (Новости)
+  if (msg.type === 'get_main_chat') {
+    const r = await db.execute({ sql: `SELECT * FROM messages WHERE to_email = 'GLOBAL' ORDER BY id ASC` });
+    return ws.send(JSON.stringify({ type: 'main_chat_history', messages: r.rows }));
+  }
+
+  if (msg.type === 'send_main_chat') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ может писать в новости' }));
+    const { text } = msg;
+    if (!text || text.trim() === '') return;
+    const now = new Date().toLocaleString('ru-RU');
+    await db.execute({ sql: 'INSERT INTO messages (from_email, to_email, text, date) VALUES (?, ?, ?, ?)', args: [me.email, 'GLOBAL', text, now] });
+    
+    for (const c of clients) {
+      if (c.readyState === 1) c.send(JSON.stringify({ type: 'new_main_message', from: me.email, text, date: now }));
     }
     return;
   }

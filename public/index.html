@@ -34,6 +34,7 @@
   #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
   .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
+  .tag.ban{background:rgba(255,0,0,.2);color:#ff5555}
   .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878;cursor:help}
   .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
   .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
@@ -390,23 +391,31 @@ function drawAdminBody(app) {
     left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
     if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
     if(u.banned_until && new Date(u.banned_until) > new Date()) {
-      const bb = h('span','tag', ' ЗАБАНЕН'); bb.style.background='rgba(255,0,0,.2)'; bb.style.color='#ff5555'; bb.style.marginLeft='6px'; left.appendChild(bb);
+      const bb = h('span','tag ban', ' ЗАБАНЕН'); bb.style.marginLeft='6px'; left.appendChild(bb);
     }
     head.appendChild(left);
 
-    // Бан
+    // Бан / Разбан
     const banDiv = h('div');
     banDiv.style.marginTop = '4px';
-    const minInput = document.createElement('input');
-    minInput.type = 'number';
-    minInput.placeholder = 'Мин.';
-    minInput.style.cssText = 'width:80px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
-    banDiv.appendChild(minInput);
-    banDiv.appendChild(btn('Забанить','btn-danger',()=>{
-      if(minInput.value === '') return showToast('Укажи время в минутах (0 = навсегда)');
-      send({type:'admin_ban', targetEmail: u.email, minutes: parseInt(minInput.value)});
-      setTimeout(()=>send({type:'admin_allusers'}), 300);
-    }));
+    
+    if (u.banned_until && new Date(u.banned_until) > new Date()) {
+      banDiv.appendChild(btn('Разбанить','btn2',()=>{
+        send({type:'admin_unban', targetEmail: u.email});
+        setTimeout(()=>send({type:'admin_allusers'}), 300);
+      }));
+    } else {
+      const minInput = document.createElement('input');
+      minInput.type = 'number';
+      minInput.placeholder = 'Мин.';
+      minInput.style.cssText = 'width:80px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
+      banDiv.appendChild(minInput);
+      banDiv.appendChild(btn('Забанить','btn-danger',()=>{
+        if(minInput.value === '') return showToast('Укажи время в минутах (0 = навсегда)');
+        send({type:'admin_ban', targetEmail: u.email, minutes: parseInt(minInput.value)});
+        setTimeout(()=>send({type:'admin_allusers'}), 300);
+      }));
+    }
     head.appendChild(banDiv);
     block.appendChild(head);
 

@@ -353,3 +353,4 @@ setInterval(async () => { try { await db.execute('SELECT 1'); } catch (e) {} }, 
 
 const PORT = process.env.PORT || 3000;
 initSchema().then(() => server.listen(PORT, () => console.log(`BANK OF BOBOR на :${PORT}`))).catch(e => { console.error(e); process.exit(1); });
+

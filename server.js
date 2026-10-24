@@ -276,6 +276,14 @@ async function handle(ws, msg) {
     return;
   }
 
+  if (msg.type === 'admin_unban') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
+    const { targetEmail } = msg;
+    await db.execute({ sql: 'UPDATE users SET banned_until = NULL WHERE email = ?', args: [targetEmail] });
+    await pushStateTo(ws, ws.userEmail);
+    return;
+  }
+
   if (msg.type === 'admin_mint' || msg.type === 'admin_burn') {
     if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
     const { targetEmail, cur, amt } = msg;

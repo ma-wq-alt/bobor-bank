@@ -72,6 +72,7 @@ let allUsers = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
+let askSecretForEmail = null; // Для старых аккаунтов
 
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
@@ -97,12 +98,19 @@ function connect() {
     if (m.type === 'state') { 
       me = m.user; accounts = m.accounts; screen = 'dashboard'; 
       localStorage.setItem('bobor_email', me.email);
+      localStorage.setItem('bobor_secret', me.has_secret ? 'saved' : 'saved');
+      askSecretForEmail = null;
       render(); 
     }
     else if (m.type === 'loggedout') { 
       me = null; accounts = {}; screen = 'login'; 
       localStorage.removeItem('bobor_email');
       localStorage.removeItem('bobor_secret');
+      askSecretForEmail = null;
+      render(); 
+    }
+    else if (m.type === 'ask_secret') { 
+      askSecretForEmail = savedEmail || 'ваш email'; 
       render(); 
     }
     else if (m.type === 'error') { 
@@ -122,19 +130,31 @@ function drawLogin() {
   const c = h('div','card');
   c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
   c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
-  c.appendChild(h('div','muted','Вход в аккаунт (защищён секретным словом)'));
-  let email = savedEmail || '', pwd='', secret='';
-  c.appendChild(input('Email', email, v=>email=v, 'email'));
-  c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
-  c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
-  c.appendChild(btn('Войти','btn',()=>{
-    localStorage.setItem('bobor_secret', secret);
-    send({type:'login',email,pwd,secret});
-  }));
-  c.appendChild(h('div','muted','Нет аккаунта? Зарегистрируйся — получишь '+START+' TTFBL.'));
-  c.appendChild(btn('Зарегистрироваться','btn2',()=>{screen='register';render();}));
+  
+  if (askSecretForEmail) {
+    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его для безопасности:'));
+    let newSecret = '';
+    c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
+    c.appendChild(btn('Сохранить и войти','btn',()=>{
+      localStorage.setItem('bobor_secret', newSecret);
+      send({type:'login', email: askSecretForEmail, pwd: null, secret: newSecret});
+    }));
+  } else {
+    c.appendChild(h('div','muted','Вход в аккаунт (защищён секретным словом)'));
+    let email = savedEmail || '', pwd='', secret='';
+    c.appendChild(input('Email', email, v=>email=v, 'email'));
+    c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
+    c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
+    c.appendChild(btn('Войти','btn',()=>{
+      localStorage.setItem('bobor_secret', secret);
+      send({type:'login',email,pwd,secret});
+    }));
+    c.appendChild(h('div','muted','Нет аккаунта? Зарегистрируйся — получишь '+START+' TTFBL.'));
+    c.appendChild(btn('Зарегистрироваться','btn2',()=>{screen='register';render();}));
+  }
   app.appendChild(c);
 }
+
 function drawRegister() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');

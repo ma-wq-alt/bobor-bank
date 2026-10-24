@@ -8,16 +8,40 @@
   body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4}
   .wrap{max-width:720px;margin:0 auto;padding:20px}
   .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:16px;margin-bottom:12px}
-  .btn{background:#FF3D00;color:#fff;border:0;padding:10px 16px;border-radius:10px;font-weight:bold;cursor:pointer}
-  .btn2{background:#C6FF00;color:#000;border:0;padding:10px 16px;border-radius:10px;font-weight:bold;cursor:pointer}
-  .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:10px 16px;border-radius:10px;font-weight:bold;cursor:pointer}
-  input,select{width:100%;padding:10px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;box-sizing:border-box;margin-bottom:8px}
+  .card.ttfbl{border-color:rgba(198,255,0,.5);box-shadow:0 0 24px rgba(198,255,0,.12)}
+  .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:#FF3D00}
+  h1{margin:0 0 6px;font-size:24px}
+  h2{margin:0 0 10px;font-size:17px}
   .muted{color:#8A8A93;font-size:13px}
-  .rowline{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #26262E;align-items:center;gap:8px}
-  nav{display:flex;gap:4px;overflow-x:auto;margin-bottom:14px}
-  nav button{background:none;border:0;color:#8A8A93;padding:8px 12px;font-size:14px;cursor:pointer;border-radius:8px}
+  .green{color:#C6FF00}
+  .red{color:#ff5555}
+  .big{font-size:30px;font-weight:bold;margin:6px 0}
+  .rowline{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #26262E;align-items:center;gap:8px}
+  nav{display:flex;gap:2px;overflow-x:auto;flex-wrap:wrap;margin-bottom:14px}
+  nav button{background:none;border:0;color:#8A8A93;padding:8px 10px;font-size:14px;cursor:pointer;border-radius:8px;font-family:inherit}
   nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
-  .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#26262E;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#fff}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:600px){
+    .grid2{grid-template-columns:1fr}
+    .header-right { flex-direction: column; align-items: flex-end; gap: 4px; }
+  }
+  .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
+  .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
+  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878}
+  .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
+  .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
+  .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
+  .formula{background:rgba(255,255,255,.03);border-radius:8px;padding:8px;font-size:12px;color:#8A8A93;margin:6px 0;font-family:monospace}
+  .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
+  .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
+  .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
+  .avatar-img{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#26262E;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:18px;color:#fff}
   .chat-container{display:flex; height: 500px; gap: 10px;}
   .chat-sidebar{flex: 1; max-width: 250px; background: #15151B; border-radius: 14px; border: 1px solid #26262E; overflow-y: auto;}
   .chat-main{flex: 2; display: flex; flex-direction: column; background: #15151B; border-radius: 14px; border: 1px solid #26262E;}
@@ -29,7 +53,6 @@
   .msg.my{align-self:flex-end;background:#FF3D00;color:#fff;border-bottom-right-radius:2px}
   .msg.their{align-self:flex-start;background:#26262E;color:#fff;border-bottom-left-radius:2px}
   .chat-input{padding: 10px; border-top: 1px solid #26262E; display: flex; gap: 5px;}
-  .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
   @media (max-width: 600px) {
     .chat-container { flex-direction: column; height: auto; }
     .chat-sidebar { max-width: 100%; height: 200px; }
@@ -39,20 +62,27 @@
 </head>
 <body>
 <div class="wrap">
-  <div id="app"></div>
+  <div id="err"></div>
+  <div id="app">Подключение...</div>
 </div>
 <script>
 const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
 const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
 const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
+const START = 3075;
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
+function rate(f,t){ if(f===t)return 1; const fr=f==='TTFBL'?RUB_PER_TTFBL:FIAT[f], tr=t==='TTFBL'?RUB_PER_TTFBL:FIAT[t]; return fr/tr; }
+function convert(m,f,t){ return Math.floor((m/Math.pow(10,DEC[f]))*rate(f,t)*Math.pow(10,DEC[t])); }
 function fmt(m,c){ return (c==='TTFBL'?'◈ ':'') + fromMinor(m,c).toFixed(DEC[c]) + ' ' + c; }
+function toRub(tt){ return (fromMinor(tt,'TTFBL')*RUB_PER_TTFBL).toFixed(2)+' RUB'; }
+function formula(f,t){ if(f==='TTFBL'||t==='TTFBL') return '1 TTFBL = 0.1 RUB (жёстко)'; return '1 '+f+' = '+(FIAT[f]/FIAT[t]).toFixed(4)+' '+t; }
 function h(tag,cls,text){ const n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n; }
 function btn(label,cls,fn){ const b=h('button',cls,label); b.onclick=fn; return b; }
 function input(ph,val,on,type){ const i=document.createElement('input'); i.placeholder=ph; i.value=val||''; if(type)i.type=type; i.oninput=()=>on(i.value); return i; }
+function sel(cur,fn){ const s=document.createElement('select'); for(const c of CUR){ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===cur)o.selected=true; s.appendChild(o);} s.onchange=()=>fn(s.value); return s; }
 function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
 
 let ws = null;
@@ -62,8 +92,13 @@ let screen = 'dashboard';
 let allUsers = [];
 let adminUsers = [];
 let chatHistory = [];
-let activeChat = null; // 'GLOBAL' или email юзера
+let activeChat = null;
+let lastHistory = [];
+let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
+let historyLoaded = false;
+let askSecretForEmail = null;
+
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
 
@@ -72,8 +107,12 @@ function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText==
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + location.host + '/');
-  ws.onopen = () => { if (savedEmail && savedSecret) send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true}); else render(); };
+  ws.onopen = () => { 
+    if (savedEmail && savedSecret) send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true});
+    else render(); 
+  };
   ws.onclose = () => { showToast('Нет соединения...'); setTimeout(connect, 2000); };
+  ws.onerror = () => {};
   ws.onmessage = (ev) => {
     let m = JSON.parse(ev.data);
     if (m.type === 'state') { me = m.user; accounts = m.accounts; screen='dashboard'; localStorage.setItem('bobor_email', me.email); render(); }
@@ -81,10 +120,12 @@ function connect() {
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
     else if (m.type === 'chat_history') { chatHistory = m.messages; render(); }
     else if (m.type === 'new_message') { 
-       if (activeChat === m.from || activeChat === 'GLOBAL') { send({type:'get_history', withEmail: activeChat}); } 
+       if (activeChat === m.from || (activeChat === 'GLOBAL' && m.to === 'GLOBAL')) { send({type:'get_history', withEmail: activeChat}); } 
        else if (m.to === me.email) { showToast('Новое сообщение от ' + m.from); }
     }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
+    else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
+    else if (m.type === 'ask_secret') { askSecretForEmail = savedEmail; render(); }
     else if (m.type === 'error') { showToast('❌ ' + m.message); }
     else if (m.type === 'toast') { showToast(m.message); }
   };
@@ -95,12 +136,18 @@ function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
   c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
-  let email = savedEmail || '', pwd='', secret='';
-  c.appendChild(input('Email', email, v=>email=v, 'email'));
-  c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
-  c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
-  c.appendChild(btn('Войти','btn',()=>{ localStorage.setItem('bobor_secret', secret); send({type:'login',email,pwd,secret}); }));
-  c.appendChild(btn('Зарегистрироваться','btn3',()=>{ screen='register'; render(); }));
+  if(askSecretForEmail) {
+    c.appendChild(h('div','muted', 'Придумайте секретное слово для ' + askSecretForEmail));
+    let sec=''; c.appendChild(input('Секретное слово', '', v=>sec=v, 'password'));
+    c.appendChild(btn('Сохранить','btn',()=>{ localStorage.setItem('bobor_secret', sec); send({type:'login', email: askSecretForEmail, secret: sec}); }));
+  } else {
+    let email = savedEmail || '', pwd='', secret='';
+    c.appendChild(input('Email', email, v=>email=v, 'email'));
+    c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
+    c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
+    c.appendChild(btn('Войти','btn',()=>{ localStorage.setItem('bobor_secret', secret); send({type:'login',email,pwd,secret}); }));
+    c.appendChild(btn('Зарегистрироваться','btn3',()=>{ screen='register'; render(); }));
+  }
   app.appendChild(c);
 }
 
@@ -123,107 +170,188 @@ function drawApp() {
   
   const header = h('div','card rowline');
   header.appendChild(h('b',null,'BANK OF BOBOR'));
-  const right = h('div', null, '');
+  const right = h('div','header-right');
+  const onlineCount = allUsers.filter(u => u.online).length;
+  right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
   right.appendChild(btn('🔄','btn3', ()=>send({type:'refresh'})));
   right.appendChild(btn('Выйти','btn3', ()=>send({type:'logout'})));
   header.appendChild(right);
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['chat','💬 Чат'],['profile','Профиль']];
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['chat','💬 Чат'],['users','Люди'],['profile','Профиль']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=> nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
-    if(id==='chat') send({type:'get_users'});
+    if(id==='chat' || id==='transfer' || id==='users') send({type:'get_users'});
     if(id==='admin') send({type:'admin_allusers'});
+    if(id==='history') { historyLoaded = false; send({type:'history'}); }
+    if(id==='chat' && activeChat) send({type:'get_history', withEmail: activeChat});
     render();
   })));
   app.appendChild(nav);
 
   if(screen==='dashboard') {
-    const c = h('div','card');
-    c.appendChild(h('h2',null,'Баланс TTFBL'));
-    c.appendChild(h('div', {style:'font-size:24px; color:#C6FF00;'}, fmt(accounts.TTFBL.bal, 'TTFBL')));
+    const c = h('div','card ttfbl');
+    c.appendChild(h('div','tag','◈ TTFBL — основная'));
+    c.appendChild(h('div','muted','Баланс в TTFBL'));
+    c.appendChild(h('div','big green', fmt(accounts.TTFBL.bal, 'TTFBL')));
+    c.appendChild(h('div','muted','≈ '+toRub(accounts.TTFBL.bal)+' по курсу банка'));
     app.appendChild(c);
   }
   
+  else if(screen==='wallet') {
+    const c = h('div','card');
+    c.appendChild(h('h2',null,'Кошелёк'));
+    for(const cur of CUR) {
+      const row = h('div','rowline');
+      row.appendChild(h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num));
+      row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
+      c.appendChild(row);
+    }
+    app.appendChild(c);
+  }
+
+  else if(screen==='convert') {
+    const st = convertState;
+    const c = h('div','card');
+    c.appendChild(h('h2',null,'Конвертация'));
+    const grid = h('div','grid2');
+    grid.appendChild(sel(st.from, v=>{st.from=v;render();}));
+    grid.appendChild(sel(st.to, v=>{st.to=v;render();}));
+    c.appendChild(grid);
+    c.appendChild(input('Сумма', st.amt, v=>{st.amt=v;render();}));
+    c.appendChild(h('div','formula', formula(st.from,st.to)));
+    const v = Number(st.amt);
+    if(v>0 && st.from!==st.to){
+      const res = convert(toMinor(v, st.from), st.from, st.to);
+      c.appendChild(h('div','converted','→ Получишь: '+fmt(res, st.to)));
+    }
+    c.appendChild(btn('Конвертировать','btn',()=>send({type:'convert', from:st.from, to:st.to, amt:st.amt})));
+    app.appendChild(c);
+  }
+
+  else if(screen==='transfer') {
+    const c = h('div','card');
+    c.appendChild(h('h2',null,'Перевод'));
+    let toEmail = '', cur = 'TTFBL', amt = '100';
+    const selUser = document.createElement('select');
+    selUser.appendChild(new Option('Выбери получателя...', ''));
+    allUsers.filter(u=>u.email!==me.email).forEach(u=> selUser.appendChild(new Option(u.name, u.email)));
+    selUser.onchange = () => toEmail = selUser.value;
+    c.appendChild(selUser);
+    c.appendChild(sel(cur, v=>{cur=v;render();}));
+    c.appendChild(input('Сумма', amt, v=>amt=v));
+    c.appendChild(btn('Перевести','btn', ()=>send({type:'transfer', toEmail, cur, amt})));
+    app.appendChild(c);
+  }
+
+  else if(screen==='vault') {
+    const c = h('div','card ttfbl');
+    c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
+    c.appendChild(h('div','muted','Каждую неделю начисляется 5 TTFBL.'));
+    c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));
+    let amt='100';
+    c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
+    c.appendChild(btn('Положить','btn2',()=>send({type:'vault_deposit', amt})));
+    c.appendChild(btn('Забрать','btn3',()=>send({type:'vault_withdraw', amt})));
+    app.appendChild(c);
+  }
+
+  else if(screen==='ttfbl') {
+    const c = h('div','card ttfbl');
+    c.appendChild(h('div','tag','◈ TTFBL'));
+    c.appendChild(h('div','big green', fmt(accounts.TTFBL.bal,'TTFBL')));
+    c.appendChild(h('div','muted','≈ '+toRub(accounts.TTFBL.bal)+' по курсу'));
+    app.appendChild(c);
+  }
+
+  else if(screen==='history') {
+    const c = h('div','card');
+    c.appendChild(h('h2',null,'История операций'));
+    if(!historyLoaded) c.appendChild(h('div','muted','Загрузка...'));
+    else if(!lastHistory.length) c.appendChild(h('div','muted','Пусто.'));
+    else lastHistory.forEach(t => {
+      const row = h('div','rowline');
+      row.appendChild(h('span',null, t.descr));
+      row.appendChild(h('span',null, (t.from_email===me.email?'−':'+')+' '+fmt(Number(t.amt), t.cur)));
+      c.appendChild(row);
+    });
+    app.appendChild(c);
+  }
+
   else if(screen==='chat') {
     const container = h('div','chat-container');
-    
-    // ЛЕВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ)
     const sidebar = h('div','chat-sidebar');
     
-    // Главный чат
-    const mainChat = h('div', 'chat-item' + (activeChat==='GLOBAL'?' active':''), '');
-    mainChat.appendChild(h('div','avatar', '📢'));
-    const mainInfo = h('div', null, '');
-    mainInfo.appendChild(h('b', null, 'Новости банка'));
-    mainInfo.appendChild(h('div','muted', 'Главный канал'));
+    const mainChat = h('div', 'chat-item' + (activeChat==='GLOBAL'?' active':''));
+    mainChat.appendChild(h('div','avatar-img', '📢'));
+    const mainInfo = h('div');
+    mainInfo.appendChild(h('b',null,'Новости банка'));
+    mainInfo.appendChild(h('div','muted','Канал'));
     mainChat.appendChild(mainInfo);
     mainChat.onclick = () => { activeChat = 'GLOBAL'; send({type:'get_history', withEmail: 'GLOBAL'}); };
     sidebar.appendChild(mainChat);
 
-    // Личные чаты (только с кем уже есть переписка или кто онлайн)
-    const chatUsers = allUsers.filter(u => u.email !== me.email);
-    chatUsers.forEach(u => {
-      const item = h('div', 'chat-item' + (activeChat===u.email?' active':''), '');
-      item.appendChild(h('div','avatar', u.name[0].toUpperCase()));
-      const info = h('div', null, '');
+    allUsers.filter(u => u.email !== me.email).forEach(u => {
+      const item = h('div', 'chat-item' + (activeChat===u.email?' active':''));
+      item.appendChild(h('div','avatar-img', u.name[0].toUpperCase()));
+      const info = h('div');
       info.appendChild(h('b', null, u.name));
-      info.appendChild(h('div','muted', u.online ? '🟢 В сети' : 'Был(а) недавно'));
+      info.appendChild(h('div','muted', u.online ? '🟢 В сети' : 'Не в сети'));
       item.appendChild(info);
       item.onclick = () => { activeChat = u.email; send({type:'get_history', withEmail: activeChat}); };
       sidebar.appendChild(item);
     });
-    
     container.appendChild(sidebar);
 
-    // ПРАВАЯ ПАНЕЛЬ (ОКНО ЧАТА)
     const main = h('div','chat-main');
     if(activeChat) {
-      const title = h('div', 'rowline', {style:'padding:10px; border-bottom:1px solid #26262E'});
-      title.appendChild(h('b', null, activeChat==='GLOBAL' ? '📢 Новости банка' : activeChat));
-      main.appendChild(title);
-      
+      main.appendChild(h('div','rowline', {style:'padding:10px'}, activeChat==='GLOBAL'?'📢 Новости банка':'Чат с '+activeChat));
       const box = h('div','chat-box');
-      chatHistory.forEach(m => {
-        const msg = h('div', 'msg ' + (m.from_email === me.email ? 'my' : 'their'), m.text);
-        box.appendChild(msg);
-      });
+      chatHistory.forEach(m => box.appendChild(h('div','msg ' + (m.from_email===me.email?'my':'their'), m.text)));
       main.appendChild(box);
       
-      // Поле ввода (скрываем для глобального чата, если ты не админ)
       if (activeChat !== 'GLOBAL' || me.role === 'admin') {
         const inputRow = h('div','chat-input');
         const inp = input('Сообщение...', '', ()=>{});
         inp.style.marginBottom = '0';
-        const sendBtn = btn('Отправить','btn', ()=>{ 
-          if(inp.value.trim()) { 
-            send({type:'send_message', toEmail: activeChat, text: inp.value}); 
-            inp.value=''; 
-          }
-        });
-        inputRow.appendChild(inp);
-        inputRow.appendChild(sendBtn);
-        main.appendChild(inputRow);
+        const sBtn = btn('→','btn', ()=>{ if(inp.value.trim()){ send({type:'send_message', toEmail:activeChat, text:inp.value}); inp.value=''; } });
+        inputRow.appendChild(inp); inputRow.appendChild(sBtn); main.appendChild(inputRow);
       } else {
-        main.appendChild(h('div', 'muted', {style:'padding:10px; text-align:center'}, 'Только администратор может писать в этот канал'));
+        main.appendChild(h('div','muted', {style:'padding:10px; text-align:center'}, 'Только админ может писать здесь'));
       }
-      
       setTimeout(()=>box.scrollTop = box.scrollHeight, 100);
     } else {
-      main.appendChild(h('div', 'muted', {style:'padding:20px; text-align:center; margin:auto'}, 'Выберите чат слева'));
+      main.appendChild(h('div','muted', {style:'padding:20px; text-align:center; margin:auto'}, 'Выбери чат слева'));
     }
     container.appendChild(main);
     app.appendChild(container);
   }
 
+  else if(screen==='users') {
+    const c = h('div','card');
+    c.appendChild(h('h2',null,'Все пользователи (' + allUsers.length + ')'));
+    allUsers.forEach(u => {
+      const row = h('div','rowline');
+      const left = h('span', null, '');
+      left.appendChild(h('span', u.online?'online-dot':'offline-dot'));
+      left.appendChild(h('b',null,u.name));
+      if(u.email === me.email) left.appendChild(h('span','tag admin',' ЭТО ТЫ'));
+      row.appendChild(left);
+      row.appendChild(h('span','muted', u.email));
+      c.appendChild(row);
+    });
+    app.appendChild(c);
+  }
+
   else if(screen==='profile') {
     const c = h('div','card');
     c.appendChild(h('h2',null,'Мой профиль'));
-    const avatar = h('img', 'avatar');
-    avatar.src = me.avatar || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-    c.appendChild(avatar);
+    const av = h('img', 'avatar-img');
+    av.style.width = '80px'; av.style.height = '80px';
+    av.src = me.avatar || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+    c.appendChild(av);
     c.appendChild(h('div',null,'Имя: ' + me.name));
     c.appendChild(h('div',null,'Почта: ' + me.email));
     c.appendChild(btn('Сменить аватар','btn2', ()=> window.open('/avatar.html?email=' + me.email, '_blank', 'width=400,height=300')));
@@ -235,11 +363,11 @@ function drawApp() {
     c.appendChild(h('h2',null,'Управление людьми'));
     adminUsers.forEach(u => {
       const row = h('div','rowline');
-      row.appendChild(h('b',null,u.name));
+      row.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
       if (u.ban_until && new Date(u.ban_until) > new Date()) {
         row.appendChild(h('span', {style:'color:red'}, 'Забанен'));
       } else {
-        const b = btn('Забанить','btn', ()=> send({type:'admin_ban', targetEmail:u.email, hours:24}));
+        const b = btn('Забанить (24ч)','btn', ()=> send({type:'admin_ban', targetEmail:u.email, hours:24}));
         b.style.padding = '4px 8px'; b.style.fontSize='12px';
         row.appendChild(b);
       }
@@ -255,6 +383,7 @@ function render() {
   if(!me) { if(screen==='register') drawRegister(); else drawLogin(); }
   else drawApp();
 }
+window.onerror = function(msg, url, line){ const e = document.getElementById('err'); e.style.display='block'; e.textContent = 'ОШИБКА: '+msg; };
 connect();
 </script>
 </body>

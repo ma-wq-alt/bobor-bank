@@ -45,9 +45,9 @@ async function initSchema() {
 
   const admin = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
   if (admin.rows.length === 0) {
-    await createUser(ADMIN_EMAIL, ADMIN_PASS, 'Mar Maks', 'admin', 'Mar Maks', '1234');
+    await createUser(ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', '1234');
   } else {
-    await db.execute({ sql: "UPDATE users SET display_name = 'Mar Maks', secret_word = '1234' WHERE email = ?", args: [ADMIN_EMAIL] });
+    await db.execute({ sql: "UPDATE users SET display_name = 'hank' WHERE email = ?", args: [ADMIN_EMAIL] });
   }
 }
 
@@ -72,17 +72,15 @@ async function getUser(email) {
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
   for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, accounts };
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, accounts, has_secret: !!u.secret_word };
 }
 
 async function checkBonuses() {
   const users = await db.execute('SELECT email, last_bonus_date FROM users');
   const now = new Date();
-  
   for (const user of users.rows) {
     const lastDate = new Date(user.last_bonus_date || 0);
     const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
-    
     if (diffDays >= 14) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
       await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
@@ -136,13 +134,21 @@ async function handle(ws, msg) {
     const { email, pwd, secret, auto } = msg;
     const u = await getUser(email || '');
     if (!u) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный email или пароль' }));
+    
     const check = await db.execute({ sql: 'SELECT pwd, secret_word FROM users WHERE email = ?', args: [u.email] });
+    const dbSecret = check.rows[0].secret_word;
     
     if (auto) {
-      if (check.rows[0].secret_word !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+      if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
     } else {
       if (check.rows[0].pwd !== pwd) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный пароль' }));
-      if (check.rows[0].secret_word !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+      // Если у аккаунта нет секретного слова (старый аккаунт)
+      if (!dbSecret) {
+        if (!secret) return ws.send(JSON.stringify({ type: 'ask_secret' })); // Просим придумать
+        await db.execute({ sql: 'UPDATE users SET secret_word = ? WHERE email = ?', args: [secret, u.email] });
+      } else {
+        if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+      }
     }
     ws.userEmail = u.email;
     return pushStateTo(ws, ws.userEmail);

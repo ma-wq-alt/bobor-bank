@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Загрузка аватарки</title>
+<style>
+  body { background: #0B0B0F; color: #F5F5F7; font-family: Arial; padding: 20px; text-align: center; }
+  .card { background: #15151B; padding: 20px; border-radius: 14px; max-width: 400px; margin: 0 auto; }
+  input { margin: 15px 0; }
+  button { background: #C6FF00; color: #000; border: 0; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>Выбери картинку</h2>
+  <form id="form">
+    <input type="file" id="file" accept="image/*" required><br>
+    <button type="submit">Загрузить</button>
+  </form>
+  <div id="status" style="margin-top:10px; font-size:14px;"></div>
+</div>
+<script>
+const email = new URLSearchParams(location.search).get('email');
+document.getElementById('form').onsubmit = (e) => {
+  e.preventDefault();
+  const file = document.getElementById('file').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64 = reader.result;
+    document.getElementById('status').textContent = 'Загрузка...';
+    const res = await fetch('/api/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, avatar: base64 })
+    });
+    if (res.ok) {
+      document.getElementById('status').textContent = 'Готово! Можете закрыть окно.';
+      setTimeout(() => window.close(), 1500);
+    } else {
+      document.getElementById('status').textContent = 'Ошибка загрузки';
+    }
+  };
+  reader.readAsDataURL(file);
+};
+</script>
+</body>
+</html>

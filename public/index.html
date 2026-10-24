@@ -17,12 +17,24 @@
   nav{display:flex;gap:4px;overflow-x:auto;margin-bottom:14px}
   nav button{background:none;border:0;color:#8A8A93;padding:8px 12px;font-size:14px;cursor:pointer;border-radius:8px}
   nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
-  .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#26262E}
-  .chat-box{height:300px;overflow-y:auto;background:#000;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+  .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;background:#26262E;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:bold;color:#fff}
+  .chat-container{display:flex; height: 500px; gap: 10px;}
+  .chat-sidebar{flex: 1; max-width: 250px; background: #15151B; border-radius: 14px; border: 1px solid #26262E; overflow-y: auto;}
+  .chat-main{flex: 2; display: flex; flex-direction: column; background: #15151B; border-radius: 14px; border: 1px solid #26262E;}
+  .chat-item{padding: 10px; border-bottom: 1px solid #26262E; cursor: pointer; display: flex; align-items: center; gap: 10px;}
+  .chat-item:hover{background: rgba(255,255,255,.05);}
+  .chat-item.active{background: rgba(255,61,0,.15); border-left: 3px solid #FF3D00;}
+  .chat-box{flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;}
   .msg{max-width:80%;padding:8px 12px;border-radius:12px;font-size:14px;word-break:break-word}
   .msg.my{align-self:flex-end;background:#FF3D00;color:#fff;border-bottom-right-radius:2px}
   .msg.their{align-self:flex-start;background:#26262E;color:#fff;border-bottom-left-radius:2px}
+  .chat-input{padding: 10px; border-top: 1px solid #26262E; display: flex; gap: 5px;}
   .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
+  @media (max-width: 600px) {
+    .chat-container { flex-direction: column; height: auto; }
+    .chat-sidebar { max-width: 100%; height: 200px; }
+    .chat-main { height: 400px; }
+  }
 </style>
 </head>
 <body>
@@ -37,7 +49,6 @@ const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
-function convert(m,f,t){ return Math.floor((m/Math.pow(10,DEC[f]))*(f==='TTFBL'?0.1:FIAT[f])/(t==='TTFBL'?0.1:FIAT[t])*Math.pow(10,DEC[t])); }
 function fmt(m,c){ return (c==='TTFBL'?'◈ ':'') + fromMinor(m,c).toFixed(DEC[c]) + ' ' + c; }
 function h(tag,cls,text){ const n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n; }
 function btn(label,cls,fn){ const b=h('button',cls,label); b.onclick=fn; return b; }
@@ -50,8 +61,8 @@ let accounts = {};
 let screen = 'dashboard';
 let allUsers = [];
 let adminUsers = [];
-let chatWith = null;
 let chatHistory = [];
+let activeChat = null; // 'GLOBAL' или email юзера
 let toastText = '';
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
@@ -70,7 +81,7 @@ function connect() {
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
     else if (m.type === 'chat_history') { chatHistory = m.messages; render(); }
     else if (m.type === 'new_message') { 
-       if (chatWith === m.from) { send({type:'get_history', withEmail: chatWith}); } 
+       if (activeChat === m.from || activeChat === 'GLOBAL') { send({type:'get_history', withEmail: activeChat}); } 
        else if (m.to === me.email) { showToast('Новое сообщение от ' + m.from); }
     }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
@@ -111,20 +122,19 @@ function drawApp() {
   const app = document.getElementById('app'); clear(app);
   
   const header = h('div','card rowline');
-  const left = h('div', null, '');
-  left.appendChild(h('b',null,'BANK OF BOBOR'));
+  header.appendChild(h('b',null,'BANK OF BOBOR'));
   const right = h('div', null, '');
   right.appendChild(btn('🔄','btn3', ()=>send({type:'refresh'})));
   right.appendChild(btn('Выйти','btn3', ()=>send({type:'logout'})));
-  header.appendChild(left); header.appendChild(right);
+  header.appendChild(right);
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['convert','Перевод'],['chat','💬 Чат'],['profile','Профиль']];
+  const tabs = [['dashboard','Обзор'],['chat','💬 Чат'],['profile','Профиль']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=> nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
-    if(id==='chat' || id==='convert') send({type:'get_users'});
+    if(id==='chat') send({type:'get_users'});
     if(id==='admin') send({type:'admin_allusers'});
     render();
   })));
@@ -132,63 +142,80 @@ function drawApp() {
 
   if(screen==='dashboard') {
     const c = h('div','card');
-    c.appendChild(h('h2',null,'Баланс'));
-    c.appendChild(h('div',null,'◈ ' + fmt(accounts.TTFBL.bal, 'TTFBL')));
+    c.appendChild(h('h2',null,'Баланс TTFBL'));
+    c.appendChild(h('div', {style:'font-size:24px; color:#C6FF00;'}, fmt(accounts.TTFBL.bal, 'TTFBL')));
     app.appendChild(c);
   }
   
-  else if(screen==='convert') {
-    const c = h('div','card');
-    c.appendChild(h('h2',null,'Переводы'));
-    let toEmail = '', amt = '100';
-    const sel = document.createElement('select');
-    sel.appendChild(new Option('Выбери человека...', ''));
-    allUsers.filter(u=>u.email!==me.email).forEach(u=> sel.appendChild(new Option(u.name, u.email)));
-    sel.onchange = () => toEmail = sel.value;
-    c.appendChild(sel);
-    c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
-    c.appendChild(btn('Отправить','btn', ()=>send({type:'transfer', toEmail, cur:'TTFBL', amt})));
-    app.appendChild(c);
-  }
-
   else if(screen==='chat') {
-    if (!chatWith) {
-      const c = h('div','card');
-      c.appendChild(h('h2',null,'Выбери, кому написать'));
-      allUsers.filter(u=>u.email!==me.email).forEach(u=>{
-        const row = h('div','rowline');
-        row.style.cursor='pointer';
-        const info = h('span',null, '');
-        info.appendChild(h('span', u.online?'🟢 ':'⚫ '));
-        info.appendChild(h('b', null, u.name));
-        row.appendChild(info);
-        row.onclick = () => { chatWith = u.email; send({type:'get_history', withEmail: chatWith}); };
-        c.appendChild(row);
-      });
-      app.appendChild(c);
-    } else {
-      const c = h('div','card');
-      const top = h('div','rowline');
-      top.appendChild(h('b',null,'Чат с ' + chatWith));
-      top.appendChild(btn('← Назад','btn3', ()=>{ chatWith=null; render(); }));
-      c.appendChild(top);
+    const container = h('div','chat-container');
+    
+    // ЛЕВАЯ ПАНЕЛЬ (СПИСОК ЧАТОВ)
+    const sidebar = h('div','chat-sidebar');
+    
+    // Главный чат
+    const mainChat = h('div', 'chat-item' + (activeChat==='GLOBAL'?' active':''), '');
+    mainChat.appendChild(h('div','avatar', '📢'));
+    const mainInfo = h('div', null, '');
+    mainInfo.appendChild(h('b', null, 'Новости банка'));
+    mainInfo.appendChild(h('div','muted', 'Главный канал'));
+    mainChat.appendChild(mainInfo);
+    mainChat.onclick = () => { activeChat = 'GLOBAL'; send({type:'get_history', withEmail: 'GLOBAL'}); };
+    sidebar.appendChild(mainChat);
 
+    // Личные чаты (только с кем уже есть переписка или кто онлайн)
+    const chatUsers = allUsers.filter(u => u.email !== me.email);
+    chatUsers.forEach(u => {
+      const item = h('div', 'chat-item' + (activeChat===u.email?' active':''), '');
+      item.appendChild(h('div','avatar', u.name[0].toUpperCase()));
+      const info = h('div', null, '');
+      info.appendChild(h('b', null, u.name));
+      info.appendChild(h('div','muted', u.online ? '🟢 В сети' : 'Был(а) недавно'));
+      item.appendChild(info);
+      item.onclick = () => { activeChat = u.email; send({type:'get_history', withEmail: activeChat}); };
+      sidebar.appendChild(item);
+    });
+    
+    container.appendChild(sidebar);
+
+    // ПРАВАЯ ПАНЕЛЬ (ОКНО ЧАТА)
+    const main = h('div','chat-main');
+    if(activeChat) {
+      const title = h('div', 'rowline', {style:'padding:10px; border-bottom:1px solid #26262E'});
+      title.appendChild(h('b', null, activeChat==='GLOBAL' ? '📢 Новости банка' : activeChat));
+      main.appendChild(title);
+      
       const box = h('div','chat-box');
       chatHistory.forEach(m => {
         const msg = h('div', 'msg ' + (m.from_email === me.email ? 'my' : 'their'), m.text);
         box.appendChild(msg);
       });
-      c.appendChild(box);
-
-      let txt = '';
-      const inp = input('Написать...', '', v=>txt=v);
-      inp.onkeydown = (e) => { if(e.key==='Enter') { send({type:'send_message', toEmail:chatWith, text:txt}); inp.value=''; } };
-      c.appendChild(inp);
-      c.appendChild(btn('Отправить','btn', ()=>{ send({type:'send_message', toEmail:chatWith, text:txt}); }));
+      main.appendChild(box);
+      
+      // Поле ввода (скрываем для глобального чата, если ты не админ)
+      if (activeChat !== 'GLOBAL' || me.role === 'admin') {
+        const inputRow = h('div','chat-input');
+        const inp = input('Сообщение...', '', ()=>{});
+        inp.style.marginBottom = '0';
+        const sendBtn = btn('Отправить','btn', ()=>{ 
+          if(inp.value.trim()) { 
+            send({type:'send_message', toEmail: activeChat, text: inp.value}); 
+            inp.value=''; 
+          }
+        });
+        inputRow.appendChild(inp);
+        inputRow.appendChild(sendBtn);
+        main.appendChild(inputRow);
+      } else {
+        main.appendChild(h('div', 'muted', {style:'padding:10px; text-align:center'}, 'Только администратор может писать в этот канал'));
+      }
       
       setTimeout(()=>box.scrollTop = box.scrollHeight, 100);
-      app.appendChild(c);
+    } else {
+      main.appendChild(h('div', 'muted', {style:'padding:20px; text-align:center; margin:auto'}, 'Выберите чат слева'));
     }
+    container.appendChild(main);
+    app.appendChild(container);
   }
 
   else if(screen==='profile') {
@@ -210,9 +237,9 @@ function drawApp() {
       const row = h('div','rowline');
       row.appendChild(h('b',null,u.name));
       if (u.ban_until && new Date(u.ban_until) > new Date()) {
-        row.appendChild(h('span', {style:'color:red'}, 'Забанен до ' + new Date(u.ban_until).toLocaleString('ru-RU')));
+        row.appendChild(h('span', {style:'color:red'}, 'Забанен'));
       } else {
-        const b = btn('Забанить (24ч)','btn', ()=> send({type:'admin_ban', targetEmail:u.email, hours:24}));
+        const b = btn('Забанить','btn', ()=> send({type:'admin_ban', targetEmail:u.email, hours:24}));
         b.style.padding = '4px 8px'; b.style.fontSize='12px';
         row.appendChild(b);
       }

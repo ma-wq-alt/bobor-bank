@@ -25,7 +25,11 @@
   nav button{background:none;border:0;color:#8A8A93;padding:8px 10px;font-size:14px;cursor:pointer;border-radius:8px;font-family:inherit}
   nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:480px){.grid2{grid-template-columns:1fr}}
+  @media(max-width:480px){
+    .grid2{grid-template-columns:1fr}
+    .header-right { flex-direction: column; align-items: flex-end; gap: 4px; }
+  }
+  .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
   .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
@@ -72,7 +76,7 @@ let allUsers = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
-let askSecretForEmail = null; // Для старых аккаунтов
+let askSecretForEmail = null;
 
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
@@ -98,7 +102,6 @@ function connect() {
     if (m.type === 'state') { 
       me = m.user; accounts = m.accounts; screen = 'dashboard'; 
       localStorage.setItem('bobor_email', me.email);
-      localStorage.setItem('bobor_secret', me.has_secret ? 'saved' : 'saved');
       askSecretForEmail = null;
       render(); 
     }
@@ -180,10 +183,16 @@ function drawDashboard() {
   const header = h('div','card');
   const top = h('div','rowline');
   top.appendChild(h('b',null,'BANK OF BOBOR PRODUCTION'));
-  const right = h('span','muted', me.display_name + ' (' + me.email + ')  ');
+  
+  const right = h('div','header-right');
+  const info = h('span','muted', me.display_name + ' (' + me.email + ')');
+  right.appendChild(info);
   right.appendChild(h('span','save','● онлайн'));
   if(me.role==='admin') right.appendChild(h('span','tag admin',' ADMIN'));
+  
+  right.appendChild(btn('🔄 Обновить','btn3',()=>send({type:'refresh'})));
   right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
+  
   top.appendChild(right);
   header.appendChild(top);
   app.appendChild(header);

@@ -96,16 +96,32 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const clients = new Set();
 
+// Рассылка списка всех пользователей и тех, кто онлайн
+async function broadcastUsers() {
+  const users = await db.execute('SELECT email, display_name, name FROM users');
+  const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
+  
+  const list = users.rows.map(r => ({ 
+    email: r.email, 
+    name: r.display_name || r.name,
+    online: onlineEmails.includes(r.email)
+  })).sort((a,b) => a.name.localeCompare(b.name));
+  
+  const data = JSON.stringify({ type: 'users_list', users: list });
+  for (const c of clients) {
+    if (c.readyState === 1) c.send(data);
+  }
+}
+
 wss.on('connection', (ws) => {
   clients.add(ws);
   ws.userEmail = null;
-
   ws.on('message', async (raw) => {
     let msg;
     try { msg = JSON.parse(raw.toString()); } catch { return ws.send(JSON.stringify({ type: 'error', message: 'bad json' })); }
     try { await handle(ws, msg); } catch (e) { console.error(e); ws.send(JSON.stringify({ type: 'error', message: e.message || 'ошибка' })); }
   });
-  ws.on('close', () => clients.delete(ws));
+  ws.on('close', () => { clients.delete(ws); broadcastUsers(); });
 });
 
 async function pushStateTo(ws, email) {
@@ -127,6 +143,7 @@ async function handle(ws, msg) {
     if (await getUser(email)) return ws.send(JSON.stringify({ type: 'error', message: 'Email уже занят' }));
     await createUser(email.toLowerCase(), pwd, name, 'user', name, secret);
     ws.userEmail = email.toLowerCase();
+    broadcastUsers();
     return pushStateTo(ws, ws.userEmail);
   }
 
@@ -150,6 +167,7 @@ async function handle(ws, msg) {
       }
     }
     ws.userEmail = u.email;
+    broadcastUsers();
     return pushStateTo(ws, ws.userEmail);
   }
 
@@ -157,19 +175,14 @@ async function handle(ws, msg) {
   const me = await getUser(ws.userEmail);
   if (!me) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
 
-  if (msg.type === 'refresh') {
-    return pushStateTo(ws, ws.userEmail);
-  }
+  if (msg.type === 'refresh') return pushStateTo(ws, ws.userEmail);
+  
+  if (msg.type === 'get_users') return broadcastUsers();
 
   if (msg.type === 'logout') {
     ws.userEmail = null;
+    broadcastUsers();
     return ws.send(JSON.stringify({ type: 'loggedout' }));
-  }
-
-  if (msg.type === 'get_users') {
-    const users = await db.execute('SELECT email, display_name, name FROM users');
-    const list = users.rows.map(r => ({ email: r.email, name: r.display_name || r.name }));
-    return ws.send(JSON.stringify({ type: 'users_list', users: list }));
   }
 
   if (msg.type === 'vault_deposit') {

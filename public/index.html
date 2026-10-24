@@ -80,12 +80,28 @@ let savedEmail=localStorage.getItem('bobor_email'), savedSecret=localStorage.get
 function showToast(t){toastText=t;render();setTimeout(()=>{if(toastText===t){toastText='';render();}},3000);}
 
 function connect(){
-  const proto=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(proto+'://'+location.host+'/');
-  ws.onopen=()=>{if(savedEmail&&savedSecret)send({type:'login',email:savedEmail,pwd:null,secret:savedSecret,auto:true});else render();};
-  ws.onclose=()=>{showToast('Нет соединения...');setTimeout(connect,2000);};
-  ws.onerror=()=>{};
-  ws.onmessage=(ev)=>{
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = proto + '://' + location.host + '/';
+  
+  console.log("Пытаюсь подключиться к:", url);
+  ws = new WebSocket(url);
+  
+  ws.onopen = () => {
+    console.log("УСПЕХ: WebSocket подключен!");
+    if(savedEmail && savedSecret) send({type:'login',email:savedEmail,pwd:null,secret:savedSecret,auto:true});
+    else render();
+  };
+  
+  ws.onerror = (err) => {
+    console.log("ОШИБКА WebSocket:", err);
+  };
+  
+  ws.onclose = () => {
+    console.log("Соединение закрыто, переподключение через 2 сек...");
+    setTimeout(connect, 2000);
+  };
+  
+  ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if(m.type==='state'){me=m.user;accounts=m.accounts;screen='dashboard';localStorage.setItem('bobor_email',me.email);render();}
     else if(m.type==='loggedout'){me=null;localStorage.clear();render();}

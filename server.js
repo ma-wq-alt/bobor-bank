@@ -45,9 +45,9 @@ async function initSchema() {
 
   const admin = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
   if (admin.rows.length === 0) {
-    await createUser(ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', '1234');
+    await createUser(ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб');
   } else {
-    await db.execute({ sql: "UPDATE users SET display_name = 'hank' WHERE email = ?", args: [ADMIN_EMAIL] });
+    await db.execute({ sql: "UPDATE users SET display_name = 'hank', secret_word = 'тсб' WHERE email = ?", args: [ADMIN_EMAIL] });
   }
 }
 
@@ -142,9 +142,8 @@ async function handle(ws, msg) {
       if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
     } else {
       if (check.rows[0].pwd !== pwd) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный пароль' }));
-      // Если у аккаунта нет секретного слова (старый аккаунт)
       if (!dbSecret) {
-        if (!secret) return ws.send(JSON.stringify({ type: 'ask_secret' })); // Просим придумать
+        if (!secret) return ws.send(JSON.stringify({ type: 'ask_secret' }));
         await db.execute({ sql: 'UPDATE users SET secret_word = ? WHERE email = ?', args: [secret, u.email] });
       } else {
         if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
@@ -157,6 +156,10 @@ async function handle(ws, msg) {
   if (!ws.userEmail) return ws.send(JSON.stringify({ type: 'error', message: 'Не залогинен' }));
   const me = await getUser(ws.userEmail);
   if (!me) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
+
+  if (msg.type === 'refresh') {
+    return pushStateTo(ws, ws.userEmail);
+  }
 
   if (msg.type === 'logout') {
     ws.userEmail = null;

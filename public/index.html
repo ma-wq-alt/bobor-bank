@@ -75,8 +75,8 @@ let historyLoaded = false;
 function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
 function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host + '/');
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + window.location.host + '/');
   ws.onopen = () => { console.log('WS connected'); render(); };
   ws.onclose = () => { showToast('Нет соединения, переподключаюсь...'); setTimeout(connect, 2000); };
   ws.onerror = () => {};

@@ -76,7 +76,7 @@ function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText==
 
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + location.host);
+  ws = new WebSocket(proto + '://' + location.host + '/');
   ws.onopen = () => { console.log('WS connected'); render(); };
   ws.onclose = () => { showToast('Нет соединения, переподключаюсь...'); setTimeout(connect, 2000); };
   ws.onerror = () => {};

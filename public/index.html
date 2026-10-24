@@ -180,4 +180,220 @@ function drawDashboard() {
   })); });
   app.appendChild(nav);
 
-  if(screen==='dashboard') draw
+  if(screen==='dashboard') drawDashBody(app);
+  else if(screen==='wallet') drawWalletBody(app);
+  else if(screen==='convert') drawConvertBody(app);
+  else if(screen==='transfer') drawTransferBody(app);
+  else if(screen==='vault') drawVaultBody(app);
+  else if(screen==='ttfbl') drawTtfblBody(app);
+  else if(screen==='history') drawHistoryBody(app);
+  else if(screen==='admin') drawAdminBody(app);
+}
+
+function drawDashBody(app) {
+  const t = accounts.TTFBL.bal;
+  const c1 = h('div','card ttfbl');
+  c1.appendChild(h('div','tag','◈ TTFBL — основная'));
+  c1.appendChild(h('div','muted','Баланс в TTFBL'));
+  c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
+  c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу банка'));
+  c1.appendChild(h('div','muted','1 TTFBL = 0.1 RUB · 1 RUB = 10 TTFBL'));
+  app.appendChild(c1);
+
+  let total = 0;
+  for(const c of CUR) total += c==='RUB' ? accounts[c].bal : convert(accounts[c].bal, c, 'RUB');
+  const c2 = h('div','card');
+  c2.appendChild(h('div','muted','Всего в RUB'));
+  c2.appendChild(h('div','big', fmt(total,'RUB')));
+  app.appendChild(c2);
+
+  const c3 = h('div','card');
+  c3.appendChild(h('h2',null,'Все валюты'));
+  for(const c of CUR) {
+    const row = h('div','rowline');
+    const lbl = h('span', c==='TTFBL'?'green':'', (c==='TTFBL'?'◈ ':'')+c);
+    row.appendChild(lbl);
+    row.appendChild(h('span',null,fmt(accounts[c].bal,c)));
+    c3.appendChild(row);
+  }
+  app.appendChild(c3);
+}
+
+function drawWalletBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Кошелёк'));
+  for(const cur of CUR) {
+    const row = h('div','rowline');
+    const lbl = h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num);
+    row.appendChild(lbl);
+    row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
+    c.appendChild(row);
+  }
+  app.appendChild(c);
+}
+
+function drawVaultBody(app) {
+  const c = h('div','card ttfbl');
+  c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
+  c.appendChild(h('div','muted','Каждую неделю начисляется 5 TTFBL. Забрать можно в любой момент.'));
+  c.appendChild(h('div','muted','На вкладе:'));
+  c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));
+  
+  let amt='100';
+  c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
+  c.appendChild(btn('Положить на вклад','btn2',()=>send({type:'vault_deposit', amt})));
+  c.appendChild(h('span',null,' '));
+  c.appendChild(btn('Забрать с вклада','btn3',()=>send({type:'vault_withdraw', amt})));
+  app.appendChild(c);
+}
+
+function drawConvertBody(app) {
+  const st = convertState;
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Конвертация'));
+  const grid = h('div','grid2');
+  grid.appendChild(sel(st.from, v=>{st.from=v;render();}));
+  grid.appendChild(sel(st.to, v=>{st.to=v;render();}));
+  c.appendChild(grid);
+  c.appendChild(input('Сумма', st.amt, v=>{st.amt=v;render();}));
+  const fromBal = accounts[st.from].bal;
+  c.appendChild(h('div','muted','Доступно: '+fmt(fromBal,st.from)));
+  c.appendChild(h('div','formula', formula(st.from,st.to)));
+  const v = Number(st.amt);
+  if(v>0 && st.from!==st.to){
+    const m = toMinor(v, st.from);
+    const res = convert(m, st.from, st.to);
+    const p = h('div','converted','→ Получишь: '+fmt(res, st.to));
+    if(m>fromBal) p.textContent += ' (недостаточно)';
+    c.appendChild(p);
+  }
+  c.appendChild(btn('Конвертировать','btn',()=>send({type:'convert', from:st.from, to:st.to, amt:st.amt})));
+  app.appendChild(c);
+}
+
+function drawTransferBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Перевод'));
+  c.appendChild(h('div','muted','TTFBL — 0%, фиат — 1%.'));
+  
+  let toEmail = '', cur = 'TTFBL', amt = '100';
+  
+  const selUser = document.createElement('select');
+  selUser.style.marginBottom = '8px';
+  const defOpt = document.createElement('option');
+  defOpt.value = ''; defOpt.textContent = 'Выбери получателя...';
+  selUser.appendChild(defOpt);
+  
+  for(const u of allUsers) {
+    if(u.email === me.email) continue;
+    const o = document.createElement('option');
+    o.value = u.email; o.textContent = u.name + ' (' + u.email + ')';
+    selUser.appendChild(o);
+  }
+  selUser.onchange = () => { toEmail = selUser.value; };
+  c.appendChild(selUser);
+
+  c.appendChild(sel(cur, v=>{cur=v;render();}));
+  c.appendChild(input('Сумма', amt, v=>amt=v));
+  c.appendChild(h('div','muted','Доступно в '+cur+': '+fmt(accounts[cur].bal,cur)));
+  
+  c.appendChild(btn('Перевести','btn',()=>{
+    if(!toEmail) return showToast('Выбери получателя');
+    send({type:'transfer', toEmail, cur, amt});
+  }));
+  app.appendChild(c);
+}
+
+function drawTtfblBody(app) {
+  const t = accounts.TTFBL.bal;
+  const c1 = h('div','card ttfbl');
+  c1.appendChild(h('div','tag','◈ TTFBL — основная'));
+  c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
+  c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу'));
+  app.appendChild(c1);
+}
+
+function drawHistoryBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'История операций'));
+  if(!historyLoaded){ c.appendChild(h('div','muted','Загрузка...')); }
+  else if(!lastHistory.length){ c.appendChild(h('div','muted','Пусто.')); }
+  else {
+    for(let i=lastHistory.length-1; i>=0; i--){
+      const t = lastHistory[i];
+      const row = h('div','rowline');
+      let dir = '·';
+      if(t.from_email === me.email) dir = '→ '+t.to_email;
+      else if(t.to_email === me.email) dir = '← '+t.from_email;
+      else dir = 'конвертация';
+      const left = h('span',null, t.descr+' ('+dir+')');
+      left.appendChild(h('div','muted', t.date));
+      row.appendChild(left);
+      row.appendChild(h('span',null, (t.from_email===me.email?'−':'+')+' '+fmt(Number(t.amt), t.cur)));
+      c.appendChild(row);
+    }
+  }
+  app.appendChild(c);
+}
+
+function drawAdminBody(app) {
+  if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Счета пользователей'));
+  
+  const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
+
+  for(const u of sorted){
+    const block = h('div','user-block');
+    const head = h('div','rowline');
+    const left = h('span',null,'');
+    left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
+    if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
+    head.appendChild(left);
+    block.appendChild(head);
+
+    for(const cur of CUR){
+      const acc = u.accounts[cur];
+      const row = h('div','acc-row');
+      row.appendChild(h('div',null,(cur==='TTFBL'?'◈ ':'')+cur+' · ' + fmt(acc.bal,cur) + ' (Вклад: '+fmt(acc.vault_bal || 0, cur)+')'));
+      
+      const actions = h('div'); actions.style.marginTop='4px';
+      const amtIn = document.createElement('input');
+      amtIn.placeholder = 'Сумма';
+      amtIn.style.cssText='width:100px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
+      actions.appendChild(amtIn);
+      
+      actions.appendChild(btn('+','btn2',()=>{ if(amtIn.value>0) { send({type:'admin_mint', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      actions.appendChild(btn('−','btn3',()=>{ if(amtIn.value>0) { send({type:'admin_burn', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      
+      row.appendChild(actions);
+      block.appendChild(row);
+    }
+    c.appendChild(block);
+  }
+  app.appendChild(c);
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if(!app) return;
+  clear(app);
+  if(!me){
+    if(screen==='register') drawRegister();
+    else drawLogin();
+  } else {
+    drawDashboard();
+  }
+  if(toastText) app.appendChild(h('div','toast', toastText));
+}
+
+window.onerror = function(msg, url, line){
+  const e = document.getElementById('err');
+  e.style.display='block';
+  e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
+};
+
+connect();
+</script>
+</body>
+</html>

@@ -12,8 +12,9 @@
   .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  input,select,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:#FF3D00}
+  .btn-danger{background:#ff3333;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:#FF3D00}
   h1{margin:0 0 6px;font-size:24px}
   h2{margin:0 0 10px;font-size:17px}
   .muted{color:#8A8A93;font-size:13px}
@@ -41,10 +42,6 @@
   .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
-  .chat-box{display:flex;flex-direction:column;height:300px;overflow-y:auto;background:#000;border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid #26262E}
-  .msg{background:#26262E;padding:8px 12px;border-radius:10px;margin-bottom:8px;max-width:80%;align-self:flex-start}
-  .msg.my{background:#FF3D00;align-self:flex-end;color:#fff}
-  .msg-news{background:rgba(198,255,0,.15);border:1px solid rgba(198,255,0,.3);color:#F5F5F7}
 </style>
 </head>
 <body>
@@ -58,8 +55,6 @@ const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
 const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
 const START = 3075;
-const ADMIN_EMAIL = 'mar.maks999@gmail.com';
-const NEWS_ID = 'news_channel';
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
@@ -77,7 +72,7 @@ function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
 let ws = null;
 let me = null;
 let accounts = {};
-let screen = 'dashboard';
+let screen = 'login';
 let lastHistory = [];
 let adminUsers = [];
 let allUsers = [];
@@ -85,8 +80,6 @@ let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
 let askSecretForEmail = null;
-let chatTarget = null; // email или NEWS_ID
-let chatMessages = [];
 
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
@@ -110,10 +103,9 @@ function connect() {
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
     if (m.type === 'state') { 
-      me = m.user; accounts = m.accounts; 
+      me = m.user; accounts = m.accounts; screen = 'dashboard'; 
       localStorage.setItem('bobor_email', me.email);
       askSecretForEmail = null;
-      if (screen === 'login' || screen === 'register') screen = 'dashboard';
       render(); 
     }
     else if (m.type === 'loggedout') { 
@@ -125,28 +117,16 @@ function connect() {
     }
     else if (m.type === 'ask_secret') { 
       askSecretForEmail = savedEmail || 'ваш email'; 
-      screen = 'login';
       render(); 
     }
     else if (m.type === 'error') { 
       showToast('❌ ' + m.message); 
-      if(m.message.includes('секретное')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } 
+      if(m.message.includes('секретное') || m.message.includes('забанены')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } 
     }
     else if (m.type === 'toast') { showToast(m.message); }
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
-    else if (m.type === 'chat_history') { 
-      if (m.chat_id === chatTarget) { chatMessages = m.messages; render(); }
-    }
-    else if (m.type === 'new_message') { 
-      if (m.chat_id === chatTarget) { 
-        chatMessages.push(m); 
-        render(); 
-        const box = document.getElementById('chat-box');
-        if(box) box.scrollTop = box.scrollHeight;
-      }
-    }
   };
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
@@ -208,13 +188,11 @@ function drawDashboard() {
   top.appendChild(h('b',null,'BANK OF BOBOR PRODUCTION'));
   
   const right = h('div','header-right');
-  const onlineCount = allUsers.filter(u => u.online).length;
-  right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
   
-  if (me.banned_until && new Date(me.banned_until) > new Date()) {
-    right.appendChild(h('span','tag admin',' БАН'));
-  }
-
+  const onlineCount = allUsers.filter(u => u.online).length;
+  const onlineBadge = h('span','save', '● ' + onlineCount + ' онлайн');
+  right.appendChild(onlineBadge);
+  
   right.appendChild(btn('🔄','btn3',()=>send({type:'refresh'})));
   right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
   
@@ -223,15 +201,13 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Главная'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['chat','Чат'],['news','Новости']];
+  const tabs = [['dashboard','Обзор'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
-  
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
     if(id==='admin'){ send({type:'admin_allusers'}); }
-    if(id==='transfer' || id==='users' || id==='chat'){ send({type:'get_users'}); }
-    if(id==='news'){ chatTarget = NEWS_ID; chatMessages = []; send({type:'get_chat', chat_id: NEWS_ID}); }
+    if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
     render();
   })); });
   app.appendChild(nav);
@@ -243,8 +219,6 @@ function drawDashboard() {
   else if(screen==='ttfbl') drawTtfblBody(app);
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
-  else if(screen==='chat') drawChatListBody(app);
-  else if(screen==='news') drawChatBody(app, NEWS_ID, 'Новости банка');
   else if(screen==='admin') drawAdminBody(app);
 }
 
@@ -260,13 +234,12 @@ function drawDashBody(app) {
   let total = 0;
   for(const c of CUR) total += c==='RUB' ? accounts[c].bal : convert(accounts[c].bal, c, 'RUB');
   const c2 = h('div','card');
-  c2.appendChild(h('div','muted','Всего в RUB'));
+  c2.appendChild(h('div','muted','Всего в RUB (базовая)'));
   c2.appendChild(h('div','big', fmt(total,'RUB')));
   app.appendChild(c2);
 
-  // Объединенный кошелек
   const c3 = h('div','card');
-  c3.appendChild(h('h2',null,'Мои счета'));
+  c3.appendChild(h('h2',null,'Кошелёк (все валюты)'));
   for(const cur of CUR) {
     const row = h('div','rowline');
     const lbl = h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num);
@@ -371,71 +344,6 @@ function drawUsersBody(app) {
   app.appendChild(c);
 }
 
-function drawChatListBody(app) {
-  const c = h('div','card');
-  c.appendChild(h('h2',null,'Выбери, кому написать'));
-  
-  for(const u of allUsers) {
-    if(u.email === me.email) continue;
-    const row = h('div','rowline');
-    row.style.cursor = 'pointer';
-    row.onclick = () => {
-      screen = 'chat_room';
-      chatTarget = u.email;
-      chatMessages = [];
-      send({type:'get_chat', chat_id: u.email < me.email ? u.email + '_' + me.email : me.email + '_' + u.email});
-      render();
-    };
-    const left = h('span', null, '');
-    left.appendChild(h('span', u.online?'online-dot':'offline-dot'));
-    left.appendChild(h('b', null, u.name));
-    row.appendChild(left);
-    row.appendChild(h('span','muted', '→'));
-    c.appendChild(row);
-  }
-  if (screen === 'chat_room') {
-    drawChatBody(app, chatTarget < me.email ? chatTarget + '_' + me.email : me.email + '_' + chatTarget, 'Чат с ' + chatTarget);
-  } else {
-    app.appendChild(c);
-  }
-}
-
-function drawChatBody(app, chat_id, title) {
-  const c = h('div','card');
-  c.appendChild(h('h2',null,title));
-  
-  const box = h('div','chat-box');
-  box.id = 'chat-box';
-  for(const m of chatMessages) {
-    const isMy = m.from_email === me.email;
-    const msgEl = h('div','msg ' + (isMy?'my':'') + (chat_id===NEWS_ID?' msg-news':''), '');
-    if (!isMy) msgEl.appendChild(h('div','muted', m.from_name || m.from_email));
-    msgEl.appendChild(h('div', null, m.text));
-    box.appendChild(msgEl);
-  }
-  c.appendChild(box);
-  
-  let text = '';
-  const inp = input('Текст сообщения...', '', v=>text=v);
-  inp.onkeydown = (e) => { if(e.key === 'Enter') sendMsg(); };
-  c.appendChild(inp);
-  
-  const sendMsg = () => {
-    if(!text.trim()) return;
-    const to_email = chat_id === NEWS_ID ? null : (chat_id.startsWith(me.email) ? chat_id.split('_')[1] : chat_id.split('_')[0]);
-    send({type:'send_msg', chat_id, to_email, text});
-    inp.value = '';
-    text = '';
-  };
-
-  c.appendChild(btn('Отправить','btn', sendMsg));
-  if (screen === 'chat_room') {
-    c.appendChild(btn('Назад','btn3', ()=>{ screen='chat'; render(); }));
-  }
-  app.appendChild(c);
-  setTimeout(()=>{ if(box) box.scrollTop = box.scrollHeight; }, 50);
-}
-
 function drawTtfblBody(app) {
   const t = accounts.TTFBL.bal;
   const c1 = h('div','card ttfbl');
@@ -482,19 +390,25 @@ function drawAdminBody(app) {
     left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
     if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
     if(u.banned_until && new Date(u.banned_until) > new Date()) {
-       const bb=h('span','tag admin',' БАН'); bb.style.marginLeft='6px'; left.appendChild(bb);
+      const bb = h('span','tag', ' ЗАБАНЕН'); bb.style.background='rgba(255,0,0,.2)'; bb.style.color='#ff5555'; bb.style.marginLeft='6px'; left.appendChild(bb);
     }
     head.appendChild(left);
-    block.appendChild(head);
 
-    // Кнопки бана
-    const banRow = h('div', 'rowline');
-    banRow.appendChild(h('span', 'muted', 'Бан:'));
-    banRow.appendChild(btn('1 час','btn3', ()=>send({type:'admin_ban', targetEmail:u.email, hours:1})));
-    banRow.appendChild(btn('1 день','btn3', ()=>send({type:'admin_ban', targetEmail:u.email, hours:24})));
-    banRow.appendChild(btn('Навсегда','btn', ()=>send({type:'admin_ban', targetEmail:u.email, hours:999999})));
-    banRow.appendChild(btn('Разбан','btn2', ()=>send({type:'admin_ban', targetEmail:u.email, hours:0})));
-    block.appendChild(banRow);
+    // Бан
+    const banDiv = h('div');
+    banDiv.style.marginTop = '4px';
+    const minInput = document.createElement('input');
+    minInput.type = 'number';
+    minInput.placeholder = 'Мин.';
+    minInput.style.cssText = 'width:80px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
+    banDiv.appendChild(minInput);
+    banDiv.appendChild(btn('Забанить','btn-danger',()=>{
+      if(minInput.value === '') return showToast('Укажи время в минутах (0 = навсегда)');
+      send({type:'admin_ban', targetEmail: u.email, minutes: parseInt(minInput.value)});
+      setTimeout(()=>send({type:'admin_allusers'}), 300);
+    }));
+    head.appendChild(banDiv);
+    block.appendChild(head);
 
     for(const cur of CUR){
       const acc = u.accounts[cur];

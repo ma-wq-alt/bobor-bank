@@ -102,7 +102,6 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 
-// API для загрузки аватарки
 app.post('/api/avatar', async (req, res) => {
   const { email, avatar } = req.body;
   if (!email || !avatar) return res.status(400).json({ error: 'no data' });
@@ -209,23 +208,32 @@ async function handle(ws, msg) {
 
   if (msg.type === 'get_history') {
     const { withEmail } = msg;
-    const r = await db.execute({ 
-      sql: `SELECT * FROM messages WHERE (from_email = ? AND to_email = ?) OR (from_email = ? AND to_email = ?) ORDER BY id ASC`, 
-      args: [me.email, withEmail, withEmail, me.email] 
-    });
+    let r;
+    if (withEmail === 'GLOBAL') {
+       r = await db.execute({ sql: `SELECT * FROM messages WHERE to_email = 'GLOBAL' ORDER BY id ASC` });
+    } else {
+       r = await db.execute({ 
+         sql: `SELECT * FROM messages WHERE (from_email = ? AND to_email = ?) OR (from_email = ? AND to_email = ?) ORDER BY id ASC`, 
+         args: [me.email, withEmail, withEmail, me.email] 
+       });
+    }
     return ws.send(JSON.stringify({ type: 'chat_history', withEmail, messages: r.rows }));
   }
 
   if (msg.type === 'send_message') {
     const { toEmail, text } = msg;
     if (!text || text.trim() === '') return;
+    
+    if (toEmail === 'GLOBAL' && me.role !== 'admin') {
+      return ws.send(JSON.stringify({ type: 'error', message: 'Писать в Новости может только админ!' }));
+    }
+
     const now = new Date().toLocaleString('ru-RU');
     await db.execute({ sql: 'INSERT INTO messages (from_email, to_email, text, date) VALUES (?, ?, ?, ?)', args: [me.email, toEmail, text, now] });
     
-    // Отправляем обоим (отправителю и получателю)
     for (const c of clients) {
-      if ((c.userEmail === me.email || c.userEmail === toEmail) && c.readyState === 1) {
-        c.send(JSON.stringify({ type: 'new_message', from: me.email, to: toEmail, text, date: now }));
+      if (toEmail === 'GLOBAL' || c.userEmail === me.email || c.userEmail === toEmail) {
+        if (c.readyState === 1) c.send(JSON.stringify({ type: 'new_message', from: me.email, to: toEmail, text, date: now }));
       }
     }
     return;
@@ -241,8 +249,7 @@ async function handle(ws, msg) {
     }
     return broadcastUsers();
   }
-  
-  // ... Остальные обработчики (переводы, вклады и т.д.) остаются без изменений ...
+
   if (msg.type === 'vault_deposit') {
     const { amt } = msg; const m = toMinor(amt, 'TTFBL');
     if (m <= 0) return; if (me.accounts.TTFBL.bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно' }));

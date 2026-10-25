@@ -203,7 +203,7 @@ function drawDashboard() {
 
   const nav = h('nav');
   const tabs = [
-    ['dashboard','Обзор'], // Вкладка кошелек убрана
+    ['dashboard','Обзор'],
     ['convert','Конвертация'],
     ['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],
     ['history','История'],['users','Люди']
@@ -234,7 +234,6 @@ function drawDashboard() {
   else if(screen==='info') drawInfoBody(app);
 }
 
-// ОБЪЕДИНЕННЫЙ ОБЗОР (счета перенесены сюда)
 function drawDashBody(app) {
   const t = accounts.TTFBL.bal;
   const c1 = h('div','card ttfbl');
@@ -405,16 +404,17 @@ function drawAdminBody(app) {
     head.appendChild(left);
     block.appendChild(head);
 
+    // Кнопки бана
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';
     if (u.banned_until && new Date(u.banned_until) > new Date()) {
       banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU') + '  '));
-      banRow.appendChild(btn('Разбанить', 'btn2 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Разбанить', 'btn2', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
     } else {
       banRow.appendChild(h('span', 'muted', 'Бан: '));
-      banRow.appendChild(btn('1ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('24ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('Навсегда', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('1ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('24ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Навсегда', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
     }
     block.appendChild(banRow);
 

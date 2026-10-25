@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BANK OF BOBOR PRODUCTION</title>
 <style>
+  /* Все стили остаются твои прежние */
   body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4}
   .wrap{max-width:720px;margin:0 auto;padding:20px}
   .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:16px;margin-bottom:12px}
@@ -47,66 +48,45 @@
   <div id="app">Подключение...</div>
 </div>
 <script>
-const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
-const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
-const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
-const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
-const START = 3075;
+// ВСТАВЬ СЮДА ВСЕ КОНСТАНТЫ И ФУНКЦИИ ТВОЕГО СТАРОГО КОДА (TTFBL, toMinor, drawLogin, drawDashboard и т.д.)
+// Я не буду их дублировать, чтобы не загромождать ответ. Просто оставь их как есть.
 
-function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
-function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
-function rate(f,t){ if(f===t)return 1; const fr=f==='TTFBL'?RUB_PER_TTFBL:FIAT[f], tr=t==='TTFBL'?RUB_PER_TTFBL:FIAT[t]; return fr/tr; }
-function convert(m,f,t){ return Math.floor((m/Math.pow(10,DEC[f]))*rate(f,t)*Math.pow(10,DEC[t])); }
-function fmt(m,c){ return (c==='TTFBL'?'◈ ':'') + fromMinor(m,c).toFixed(DEC[c]) + ' ' + c; }
-function toRub(tt){ return (fromMinor(tt,'TTFBL')*RUB_PER_TTFBL).toFixed(2)+' RUB'; }
-function formula(f,t){ if(f==='TTFBL'||t==='TTFBL') return '1 TTFBL = 0.1 RUB (жёстко)'; return '1 '+f+' = '+(FIAT[f]/FIAT[t]).toFixed(4)+' '+t; }
-function h(tag,cls,text){ const n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n; }
-function btn(label,cls,fn){ const b=h('button',cls,label); b.onclick=fn; return b; }
-function input(ph,val,on,type){ const i=document.createElement('input'); i.placeholder=ph; i.value=val||''; if(type)i.type=type; i.oninput=()=>on(i.value); return i; }
-function sel(cur,fn){ const s=document.createElement('select'); for(const c of CUR){ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===cur)o.selected=true; s.appendChild(o);} s.onchange=()=>fn(s.value); return s; }
-function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
+// ... ТУТ ТВОЙ СТАРЫЙ КОД (переменные, функции конвертации, drawLogin, drawDashboard, render) ...
 
-let ws = null;
-let me = null;
-let accounts = {};
-let screen = 'dashboard';
-let lastHistory = [];
-let adminUsers = [];
-let allUsers = [];
-let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
-let toastText = '';
-let historyLoaded = false;
-let askSecretForEmail = null;
+// УДАЛИ СТАРУЮ СТРОКУ connect(); В САМОМ НИЗУ И ВСТАВЬ ЭТО:
 
-let savedEmail = localStorage.getItem('bobor_email');
-let savedSecret = localStorage.getItem('bobor_secret');
+// ==========================================
+// БЛОК ПРОВЕРКИ BOBOR-ID (АВТОЗАГРУЗКА)
+// ==========================================
+function startApp() {
+  const savedEmail = localStorage.getItem('bobor_email');
+  
+  // Если человек ни разу не заходил и нет кэша — пускаем на экран входа (чтобы он мог зарегаться)
+  // НО если кэш уже есть (он подтвержден) — сразу в банк.
+  const isApproved = localStorage.getItem('bobor_approved') === 'true';
 
-function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
-
-// === УМНАЯ ПРОВЕРКА С АВТОЗАГРУЗКОЙ ===
-function checkPassport() {
-  const cachedApproval = localStorage.getItem('bobor_approved');
-  if (cachedApproval === 'true') {
-    connect(); 
+  if (isApproved) {
+    connect(); // Автозагрузка — сразу в банк
     return;
   }
 
   document.getElementById('app').innerHTML = `
     <div class="card" style="text-align:center;padding:50px;">
       <h1 style="color:#FFB800;">⏳ ПРОВЕРКА...</h1>
-      <p class="muted">Проверяем ваш BOBOR-ID...</p>
+      <p class="muted">Проверяем статус BOBOR-ID...</p>
     </div>
   `;
 
   let emailToCheck = savedEmail || localStorage.getItem('id_email');
 
   if (!emailToCheck) {
+    // Если вообще нет данных о входе - показываем заглушку
     document.getElementById('app').innerHTML = `
       <div class="card" style="text-align:center;padding:50px;">
         <h1 style="color:#FF5555;">🚫 НУЖЕН BOBOR-ID</h1>
         <p class="muted">Для входа в банк сначала получите BOBOR-ID.</p>
         <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Получить BOBOR-ID</button>
-        <button class="btn" style="width:100%;margin-top:10px;" onclick="connect()">Я уже подтвержден</button>
+        <button class="btn" style="width:100%;margin-top:10px;" onclick="connect()">Войти</button>
       </div>
     `;
     return;
@@ -124,7 +104,7 @@ function checkPassport() {
             <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
             <p class="muted">Ваш BOBOR-ID не подтвержден.</p>
             <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
-            <button class="btn" style="width:100%;margin-top:10px;" onclick="forceCheck()">Я подтвержден (проверить)</button>
+            <button class="btn" style="width:100%;margin-top:10px;" onclick="checkPassportAgain()">Я подтвержден (проверить)</button>
           </div>
         `;
       }
@@ -132,12 +112,12 @@ function checkPassport() {
     .catch(() => { connect(); });
 }
 
-// Принудительная проверка (для кнопки "Обновить")
-function forceCheck() {
-  localStorage.removeItem('bobor_approved'); // Сбрасываем кэш, чтобы проверило заново
-  const emailToCheck = savedEmail || localStorage.getItem('id_email');
+// Ручная проверка (сбрасывает кэш)
+function checkPassportAgain() {
+  localStorage.removeItem('bobor_approved');
+  const emailToCheck = localStorage.getItem('bobor_email') || localStorage.getItem('id_email');
   if(!emailToCheck) return location.reload();
-  
+
   document.getElementById('app').innerHTML = `<div class="card" style="text-align:center;padding:50px;"><h1 style="color:#FFB800;">⏳ ПРОВЕРКА...</h1></div>`;
   
   fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
@@ -147,68 +127,15 @@ function forceCheck() {
         localStorage.setItem('bobor_approved', 'true');
         connect(); 
       } else {
-        alert('Ваш паспорт все еще не подтвержден админом.');
+        alert('Ваш BOBOR-ID все еще не подтвержден админом.');
         location.reload();
       }
     })
     .catch(() => { alert('BOBOR-ID не отвечает.'); location.reload(); });
 }
 
-function connect() {
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(proto + '://' + window.location.host + '/');
-  ws.onopen = () => { if (savedEmail && savedSecret) send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true}); else render(); };
-  ws.onclose = () => { showToast('Нет соединения...'); setTimeout(connect, 2000); };
-  ws.onerror = () => {};
-  ws.onmessage = (ev) => {
-    let m; try { m = JSON.parse(ev.data); } catch { return; }
-    if (m.type === 'state') { me = m.user; accounts = m.accounts; screen = 'dashboard'; localStorage.setItem('bobor_email', me.email); askSecretForEmail = null; render(); }
-    else if (m.type === 'loggedout') { me = null; accounts = {}; screen = 'login'; localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); localStorage.removeItem('bobor_approved'); askSecretForEmail = null; render(); }
-    else if (m.type === 'ask_secret') { askSecretForEmail = savedEmail || 'ваш email'; render(); }
-    else if (m.type === 'error') { showToast('❌ ' + m.message); if(m.message.includes('секретное')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } }
-    else if (m.type === 'toast') { showToast(m.message); }
-    else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
-    else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
-    else if (m.type === 'users_list') { allUsers = m.users; render(); }
-  };
-}
-function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
-
-// --- Отрисовка ---
-function drawLogin() {
-  const app = document.getElementById('app'); clear(app);
-  const c = h('div','card');
-  c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
-  c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
-  
-  if (askSecretForEmail) {
-    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его:'));
-    let newSecret = '';
-    c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
-    c.appendChild(btn('Сохранить и войти','btn',()=>{
-      localStorage.setItem('bobor_secret', newSecret);
-      send({type:'login', email: askSecretForEmail, pwd: null, secret: newSecret});
-    }));
-  } else {
-    c.appendChild(h('div','muted','Вход в аккаунт'));
-    let email = savedEmail || '', pwd='', secret='';
-    c.appendChild(input('Email', email, v=>email=v, 'email'));
-    c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
-    c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
-    c.appendChild(btn('Войти','btn',()=>{
-      localStorage.setItem('bobor_secret', secret);
-      send({type:'login',email,pwd,secret});
-    }));
-    c.appendChild(h('div','muted','Нет аккаунта? Зарегистрируйся — получишь '+START+' TTFBL.'));
-    c.appendChild(btn('Зарегистрироваться','btn2',()=>{screen='register';render();}));
-  }
-  app.appendChild(c);
-}
-
-// ... (Остальные функции отрисовки остаются без изменений)
-
-// ЗАПУСКАЕМ ПРОВЕРКУ
-checkPassport();
+// ЗАПУСКАЕМ ВМЕСТО connect()
+startApp();
 </script>
 </body>
 </html>

@@ -1,365 +1,526 @@
-import express from 'express';
-import { WebSocketServer } from 'ws';
-import { createClient } from '@libsql/client';
-import http from 'http';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const TURSO_URL = process.env.TURSO_URL;
-const TURSO_TOKEN = process.env.TURSO_TOKEN;
-if (!TURSO_URL || !TURSO_TOKEN) { console.error('Нет TURSO_URL или TURSO_TOKEN'); process.exit(1); }
-const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
-
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BANK OF BOBOR PRODUCTION</title>
+<style>
+  body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4}
+  .wrap{max-width:720px;margin:0 auto;padding:20px}
+  .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:16px;margin-bottom:12px}
+  .card.ttfbl{border-color:rgba(198,255,0,.5);box-shadow:0 0 24px rgba(198,255,0,.12)}
+  .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
+  input,select,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#FF3D00}
+  h1{margin:0 0 6px;font-size:24px}
+  h2{margin:0 0 10px;font-size:17px}
+  .muted{color:#8A8A93;font-size:13px}
+  .green{color:#C6FF00}
+  .red{color:#ff5555}
+  .big{font-size:30px;font-weight:bold;margin:6px 0}
+  .rowline{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #26262E;align-items:center;gap:8px}
+  nav{display:flex;gap:2px;overflow-x:auto;flex-wrap:wrap;margin-bottom:14px}
+  nav button{background:none;border:0;color:#8A8A93;padding:8px 10px;font-size:14px;cursor:pointer;border-radius:8px;font-family:inherit}
+  nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:480px){ .grid2{grid-template-columns:1fr} .header-right { flex-direction: column; align-items: flex-end; gap: 4px; } }
+  .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
+  .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
+  .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
+  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878;cursor:help}
+  .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
+  .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
+  .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
+  .formula{background:rgba(255,255,255,.03);border-radius:8px;padding:8px;font-size:12px;color:#8A8A93;margin:6px 0;font-family:monospace}
+  .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
+  .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
+  .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
+  .news-msg { background: rgba(198,255,0,.15); border: 1px solid rgba(198,255,0,.3); padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="err"></div>
+  <div id="app">Подключение...</div>
+</div>
+<script>
 const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
-const FIAT = { RUB: 1, USD: 90, TRY: 2.8, KZT: 0.2 };
-const CUR = ['TTFBL', 'RUB', 'USD', 'TRY', 'KZT'];
-const DEC = { RUB: 2, USD: 2, TRY: 2, KZT: 2, TTFBL: 0 };
-const START_TTFBL = 3075;
-const TX_FEE_PCT = 1;
+const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
+const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
+const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
+const START = 3075;
 const ADMIN_EMAIL = 'mar.maks999@gmail.com';
-const ADMIN_PASS = '1495';
+const NEWS_ID = 'news_channel';
 
-function toMinor(v, c) { return Math.round(Number(v) * Math.pow(10, DEC[c])); }
-function fromMinor(m, c) { return m / Math.pow(10, DEC[c]); }
-function convertMinor(m, f, t) { 
-  if (f === t) return m;
-  const fr = f === 'TTFBL' ? RUB_PER_TTFBL : FIAT[f];
-  const tr = t === 'TTFBL' ? RUB_PER_TTFBL : FIAT[t];
-  return Math.floor((m / Math.pow(10, DEC[f])) * (fr / tr) * Math.pow(10, DEC[t])); 
-}
-function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 8999999999); }
+function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
+function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
+function rate(f,t){ if(f===t)return 1; const fr=f==='TTFBL'?RUB_PER_TTFBL:FIAT[f], tr=t==='TTFBL'?RUB_PER_TTFBL:FIAT[t]; return fr/tr; }
+function convert(m,f,t){ return Math.floor((m/Math.pow(10,DEC[f]))*rate(f,t)*Math.pow(10,DEC[t])); }
+function fmt(m,c){ return (c==='TTFBL'?'◈ ':'') + fromMinor(m,c).toFixed(DEC[c]) + ' ' + c; }
+function toRub(tt){ return (fromMinor(tt,'TTFBL')*RUB_PER_TTFBL).toFixed(2)+' RUB'; }
+function formula(f,t){ if(f==='TTFBL'||t==='TTFBL') return '1 TTFBL = 0.1 RUB (жёстко)'; return '1 '+f+' = '+(FIAT[f]/FIAT[t]).toFixed(4)+' '+t; }
+function h(tag,cls,text){ const n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n; }
+function btn(label,cls,fn){ const b=h('button',cls,label); b.onclick=fn; return b; }
+function input(ph,val,on,type){ const i=document.createElement('input'); i.placeholder=ph; i.value=val||''; if(type)i.type=type; i.oninput=()=>on(i.value); return i; }
+function sel(cur,fn){ const s=document.createElement('select'); for(const c of CUR){ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===cur)o.selected=true; s.appendChild(o);} s.onchange=()=>fn(s.value); return s; }
+function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
 
-// Генерация кода
-function generatePassCode(name) {
-  const digits = Math.floor(10000 + Math.random() * 89999);
-  const letter = (name && name.length > 0) ? name[0].toLowerCase() : 'x';
-  return `${digits}${letter}`;
-}
+let ws = null;
+let me = null;
+let accounts = {};
+let screen = 'dashboard';
+let lastHistory = [];
+let adminUsers = [];
+let allUsers = [];
+let newsMessages = [];
+let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
+let toastText = '';
+let historyLoaded = false;
+let askSecretForEmail = null;
 
-async function initSchema() {
-  await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
-    `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
-    `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
-  ]);
+let savedEmail = localStorage.getItem('bobor_email');
+let savedSecret = localStorage.getItem('bobor_secret');
 
-  try { await db.execute('ALTER TABLE users ADD COLUMN banned_until TEXT'); } catch(e) {}
-  try { await db.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch(e) {}
-  try { await db.execute('ALTER TABLE users ADD COLUMN secret_word TEXT'); } catch(e) {}
-  try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
-  try { await db.execute('ALTER TABLE users ADD COLUMN pass_code TEXT'); } catch(e) {}
-  try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
+function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
-  // Восстановление админа и его кода
-  try {
-    const check = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
-    if (check.rows.length === 0) {
-      await db.execute({
-        sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, pass_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб', '14958м']
-      });
-      for (const c of CUR) {
-        const start = (c === 'TTFBL') ? toMinor(50000, 'TTFBL') : 0;
-        await db.execute({
-          sql: 'INSERT INTO accounts (email, currency, num, bal, vault_bal) VALUES (?, ?, ?, ?, 0)',
-          args: [ADMIN_EMAIL, c, genNum(), start]
-        });
-      }
-    } else {
-      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin', pass_code = '14958м' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
-    }
-  } catch(e) {}
-
-  // ЖЕСТКОЕ ОБНОВЛЕНИЕ КОДА ДЛЯ БУЛЬБОЕДА
-  try {
-    await db.execute({ sql: "UPDATE users SET pass_code = '13987с' WHERE email = 'mardanovtri@gmail.com'" });
-  } catch(e) {}
-
-  // ПРИНУДИТЕЛЬНАЯ ГЕНЕРАЦИЯ КОДОВ ДЛЯ ВСЕХ ОСТАЛЬНЫХ (у кого код пустой или старый)
-  try {
-    const users = await db.execute('SELECT email, name, display_name, pass_code FROM users');
-    for (const u of users.rows) {
-      if (u.email === ADMIN_EMAIL || u.email === 'mardanovtri@gmail.com') continue;
-      // Если кода нет, или он не заканчивается на правильную букву, или он короткий
-      const expectedLetter = (u.display_name || u.name || 'x')[0].toLowerCase();
-      if (!u.pass_code || u.pass_code.length !== 6 || !u.pass_code.endsWith(expectedLetter)) {
-        const newCode = generatePassCode(u.display_name || u.name);
-        await db.execute({ sql: 'UPDATE users SET pass_code = ? WHERE email = ?', args: [newCode, u.email] });
-      }
-    }
-    console.log('✅ Коды удостоверений проверены и обновлены');
-  } catch(e) { console.log('Ошибка обновления кодов:', e.message); }
-}
-
-async function createUser(email, pwd, name, role, display_name, secret_word) {
-  const code = generatePassCode(name);
-  await db.execute({
-    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date, pass_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    args: [email, pwd, name, role, display_name, secret_word, new Date().toISOString(), code],
-  });
-  for (const c of CUR) {
-    const start = (c === 'TTFBL') ? toMinor(START_TTFBL, 'TTFBL') : 0;
-    await db.execute({
-      sql: 'INSERT INTO accounts (email, currency, num, bal, vault_bal) VALUES (?, ?, ?, ?, 0)',
-      args: [email, c, genNum(), start],
-    });
-  }
-}
-
-async function getUser(email) {
-  const r = await db.execute({ sql: 'SELECT * FROM users WHERE email = ?', args: [String(email).toLowerCase()] });
-  if (r.rows.length === 0) return null;
-  const u = r.rows[0];
-  const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
-  const accounts = {};
-  for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
+function connect() {
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(proto + '://' + window.location.host + '/');
   
-  let passCode = u.pass_code;
-  if (!passCode) {
-    passCode = generatePassCode(u.display_name || u.name);
-    await db.execute({ sql: 'UPDATE users SET pass_code = ? WHERE email = ?', args: [passCode, u.email] });
-  }
-
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, pass_code: passCode };
-}
-
-async function checkBonuses() {
-  const users = await db.execute('SELECT email, last_bonus_date FROM users');
-  const now = new Date();
-  for (const user of users.rows) {
-    const lastDate = new Date(user.last_bonus_date || 0);
-    const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
-    if (diffDays >= 14) {
-      await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
-      await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
-      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', 100, 'Бонус: 100 TTFBL (раз в 2 недели)', now.toLocaleString('ru-RU')] });
-    }
-  }
-}
-setInterval(checkBonuses, 1000 * 60 * 60); 
-
-const app = express();
-app.use(express.static(path.join(__dirname, 'public')));
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-const clients = new Set();
-
-async function broadcastUsers() {
-  const users = await db.execute('SELECT email, display_name, name FROM users');
-  const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
-  const list = users.rows.map(r => ({ email: r.email, name: r.display_name || r.name, online: onlineEmails.includes(r.email) })).sort((a,b) => a.name.localeCompare(b.name));
-  const data = JSON.stringify({ type: 'users_list', users: list });
-  for (const c of clients) if (c.readyState === 1) c.send(data);
-}
-
-wss.on('connection', (ws) => {
-  clients.add(ws);
-  ws.userEmail = null;
-  ws.on('message', async (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw.toString()); } catch { return ws.send(JSON.stringify({ type: 'error', message: 'bad json' })); }
-    try { await handle(ws, msg); } catch (e) { console.error(e); ws.send(JSON.stringify({ type: 'error', message: e.message || 'ошибка' })); }
-  });
-  ws.on('close', () => { clients.delete(ws); broadcastUsers(); });
-});
-
-async function pushStateTo(ws, email) {
-  const u = await getUser(email);
-  if (u) ws.send(JSON.stringify({ type: 'state', user: u, accounts: u.accounts }));
-  return u;
-}
-
-async function handle(ws, msg) {
-  if (msg.type === 'register') {
-    const { email, pwd, name, secret } = msg;
-    if (!email || email.indexOf('@') < 0) return ws.send(JSON.stringify({ type: 'error', message: 'Некорректный email' }));
-    if (!pwd || pwd.length < 6) return ws.send(JSON.stringify({ type: 'error', message: 'Пароль мин. 6' }));
-    if (!name || name.length < 2) return ws.send(JSON.stringify({ type: 'error', message: 'Введи имя' }));
-    if (!secret || secret.length < 2) return ws.send(JSON.stringify({ type: 'error', message: 'Секретное слово мин. 2' }));
-    if (await getUser(email)) return ws.send(JSON.stringify({ type: 'error', message: 'Email уже занят' }));
-    await createUser(email.toLowerCase(), pwd, name, 'user', name, secret);
-    ws.userEmail = email.toLowerCase();
-    broadcastUsers();
-    return pushStateTo(ws, ws.userEmail);
-  }
-
-  if (msg.type === 'login') {
-    const { email, pwd, secret, auto } = msg;
-    const u = await getUser(email || '');
-    if (!u) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный email или пароль' }));
-    
-    const check = await db.execute({ sql: 'SELECT pwd, secret_word FROM users WHERE email = ?', args: [u.email] });
-    const dbSecret = check.rows[0].secret_word;
-    
-    if (auto) {
-      if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+  ws.onopen = () => { 
+    if (savedEmail && savedSecret) {
+      send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true});
     } else {
-      if (check.rows[0].pwd !== pwd) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный пароль' }));
-      if (!dbSecret) {
-        if (!secret) return ws.send(JSON.stringify({ type: 'ask_secret' }));
-        await db.execute({ sql: 'UPDATE users SET secret_word = ? WHERE email = ?', args: [secret, u.email] });
-      } else {
-        if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
-      }
+      render();
     }
-    ws.userEmail = u.email;
-    broadcastUsers();
-    return pushStateTo(ws, ws.userEmail);
-  }
-
-  if (!ws.userEmail) return ws.send(JSON.stringify({ type: 'error', message: 'Не залогинен' }));
-  const me = await getUser(ws.userEmail);
-  if (!me) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
-
-  if (msg.type === 'refresh') return pushStateTo(ws, ws.userEmail);
-  if (msg.type === 'get_users') return broadcastUsers();
-
-  if (msg.type === 'logout') {
-    ws.userEmail = null;
-    broadcastUsers();
-    return ws.send(JSON.stringify({ type: 'loggedout' }));
-  }
-
-  if (msg.type === 'vault_deposit') {
-    const { amt } = msg;
-    const m = toMinor(amt, 'TTFBL');
-    if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    if (me.accounts.TTFBL.bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL' }));
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
-    await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
-    await pushStateTo(ws, ws.userEmail);
-    return;
-  }
-
-  if (msg.type === 'vault_withdraw') {
-    const { amt } = msg;
-    const m = toMinor(amt, 'TTFBL');
-    if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    if (me.accounts.TTFBL.vault_bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно на вкладе' }));
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
-    await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
-    await pushStateTo(ws, ws.userEmail);
-    return;
-  }
-
-  if (msg.type === 'convert') {
-    const { from, to, amt } = msg;
-    if (!CUR.includes(from) || !CUR.includes(to)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
-    if (from === to) return ws.send(JSON.stringify({ type: 'error', message: 'Выбери разные валюты' }));
-    const v = Number(amt);
-    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    const m = toMinor(v, from);
-    if (me.accounts[from].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно' }));
-    const res = convertMinor(m, from, to);
-    if (res <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма слишком мала' }));
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, from] });
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [res, me.email, to] });
-    await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, 0, ?, ?)', args: [null, null, `${from}→${to}`, m, `Конвертация ${from} → ${to}`, new Date().toLocaleString('ru-RU')] });
-    await pushStateTo(ws, ws.userEmail);
-    return ws.send(JSON.stringify({ type: 'toast', message: `Сконвертировано ${from} → ${res} ${to}` }));
-  }
-
-  if (msg.type === 'transfer') {
-    const { toEmail, cur, amt } = msg;
-    if (!CUR.includes(cur)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
-    const v = Number(amt);
-    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    const target = await getUser(toEmail || '');
-    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Получатель не найден' }));
-    if (target.email === me.email) return ws.send(JSON.stringify({ type: 'error', message: 'Нельзя себе' }));
-    const m = toMinor(v, cur);
-    const fee = cur === 'TTFBL' ? 0 : Math.floor(m * TX_FEE_PCT / 100);
-    if (me.accounts[cur].bal < m + fee) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно (с комиссией)' }));
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m + fee, me.email, cur] });
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-    await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [me.email, target.email, cur, m, fee, 'Перевод', new Date().toLocaleString('ru-RU')] });
-    await pushStateTo(ws, ws.userEmail);
-    ws.send(JSON.stringify({ type: 'toast', message: `Переведено ${m} ${cur} → ${target.email}` }));
-    for (const c of clients) {
-      if (c.userEmail === target.email && c.readyState === 1) {
-        pushStateTo(c, target.email);
-        c.send(JSON.stringify({ type: 'toast', message: `Получено ${m} ${cur} от ${me.display_name}` }));
-      }
+  };
+  ws.onclose = () => { showToast('Нет соединения...'); setTimeout(connect, 2000); };
+  ws.onerror = () => {};
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type === 'state') { 
+      me = m.user; accounts = m.accounts; screen = 'dashboard'; 
+      localStorage.setItem('bobor_email', me.email);
+      askSecretForEmail = null;
+      render(); 
     }
-    return;
-  }
-
-  if (msg.type === 'history') {
-    const r = await db.execute({ sql: `SELECT * FROM txs WHERE from_email = ? OR to_email = ? OR (from_email IS NULL AND to_email IS NULL) ORDER BY id DESC LIMIT 200`, args: [me.email, me.email] });
-    return ws.send(JSON.stringify({ type: 'history', txs: r.rows }));
-  }
-
-  if (msg.type === 'admin_mint' || msg.type === 'admin_burn') {
-    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    const { targetEmail, cur, amt } = msg;
-    if (!CUR.includes(cur)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
-    const target = await getUser(targetEmail || '');
-    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
-    const v = Number(amt);
-    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    const m = toMinor(v, cur);
-    if (msg.type === 'admin_mint') {
-      await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: начисление', new Date().toLocaleString('ru-RU')] });
-    } else {
-      if (target.accounts[cur].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'У пользователя недостаточно' }));
-      await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, NULL, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: списание', new Date().toLocaleString('ru-RU')] });
+    else if (m.type === 'loggedout') { 
+      me = null; accounts = {}; screen = 'login'; 
+      localStorage.removeItem('bobor_email');
+      localStorage.removeItem('bobor_secret');
+      askSecretForEmail = null;
+      render(); 
     }
-    await pushStateTo(ws, ws.userEmail);
-    for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
-    return;
-  }
-
-  if (msg.type === 'admin_ban') {
-    if (me.role !== 'admin') return;
-    const { targetEmail, hours } = msg;
-    let banned_until = null;
-    if (hours > 0) {
-      const d = new Date();
-      d.setHours(d.getHours() + hours);
-      banned_until = d.toISOString();
+    else if (m.type === 'ask_secret') { 
+      askSecretForEmail = savedEmail || 'ваш email'; 
+      render(); 
     }
-    await db.execute({ sql: 'UPDATE users SET banned_until = ? WHERE email = ?', args: [banned_until, targetEmail] });
-    for (const c of clients) if (c.userEmail === targetEmail) pushStateTo(c, targetEmail);
-    return;
-  }
-
-  if (msg.type === 'admin_role') {
-    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    const { targetEmail, role } = msg;
-    if (role !== 'admin' && role !== 'user') return ws.send(JSON.stringify({ type: 'error', message: 'Роль не та' }));
-    await db.execute({ sql: 'UPDATE users SET role = ? WHERE email = ?', args: [role, targetEmail] });
-    await pushStateTo(ws, ws.userEmail);
-    return;
-  }
-
-  if (msg.type === 'admin_allusers') {
-    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    const users = await db.execute('SELECT email, name, display_name, role, banned_until, pwd, secret_word, pass_code FROM users');
-    const result = [];
-    for (const row of users.rows) {
-      const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
-      const accounts = {};
-      for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-      result.push({ 
-        email: row.email, 
-        name: row.display_name || row.name, 
-        role: row.role, 
-        banned_until: row.banned_until, 
-        accounts,
-        pwd: row.pwd,
-        secret: row.secret_word,
-        pass_code: row.pass_code || '----'
-      });
+    else if (m.type === 'error') { 
+      showToast('❌ ' + m.message); 
+      if(m.message.includes('секретное')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } 
     }
-    return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));
+    else if (m.type === 'toast') { showToast(m.message); }
+    else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
+    else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
+    else if (m.type === 'users_list') { allUsers = m.users; render(); }
+    else if (m.type === 'chat_history') { newsMessages = m.messages; render(); }
+    else if (m.type === 'new_message' && m.chat_id === NEWS_ID) { newsMessages.push(m); if(screen === 'info') render(); }
+  };
+}
+function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
+
+function drawLogin() {
+  const app = document.getElementById('app'); clear(app);
+  const c = h('div','card');
+  c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
+  c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
+  
+  if (askSecretForEmail) {
+    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его:'));
+    let newSecret = '';
+    c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
+    c.appendChild(btn('Сохранить и войти','btn',()=>{
+      localStorage.setItem('bobor_secret', newSecret);
+      send({type:'login', email: askSecretForEmail, pwd: null, secret: newSecret});
+    }));
+  } else {
+    c.appendChild(h('div','muted','Вход в аккаунт (защищён секретным словом)'));
+    let email = savedEmail || '', pwd='', secret='';
+    c.appendChild(input('Email', email, v=>email=v, 'email'));
+    c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
+    c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
+    c.appendChild(btn('Войти','btn',()=>{
+      localStorage.setItem('bobor_secret', secret);
+      send({type:'login',email,pwd,secret});
+    }));
+    c.appendChild(h('div','muted','Нет аккаунта? Зарегистрируйся — получишь '+START+' TTFBL.'));
+    c.appendChild(btn('Зарегистрироваться','btn2',()=>{screen='register';render();}));
   }
+  app.appendChild(c);
 }
 
-setInterval(async () => { try { await db.execute('SELECT 1'); } catch (e) {} }, 4 * 60 * 1000);
+function drawRegister() {
+  const app = document.getElementById('app'); clear(app);
+  const c = h('div','card');
+  c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
+  c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
+  c.appendChild(h('div','muted','Стартовый баланс: '+START+' TTFBL.'));
+  let name='', email='', pwd='', secret='';
+  c.appendChild(input('Имя', '', v=>name=v));
+  c.appendChild(input('Email', '', v=>email=v, 'email'));
+  c.appendChild(input('Пароль (мин. 6)', '', v=>pwd=v, 'password'));
+  c.appendChild(input('Секретное слово (мин. 2)', '', v=>secret=v, 'password'));
+  c.appendChild(btn('Создать аккаунт','btn',()=>{
+    localStorage.setItem('bobor_secret', secret);
+    send({type:'register',email,pwd,name,secret});
+  }));
+  c.appendChild(h('div','muted','Уже есть аккаунт?'));
+  c.appendChild(btn('Войти','btn3',()=>{screen='login';render();}));
+  app.appendChild(c);
+}
 
-const PORT = process.env.PORT || 3000;
-initSchema().then(() => server.listen(PORT, () => console.log(`🏦 BANK OF BOBOR на :${PORT}`))).catch(e => { console.error(e); process.exit(1); });
+function drawDashboard() {
+  const app = document.getElementById('app'); clear(app);
+  const header = h('div','card');
+  const top = h('div','rowline');
+  top.appendChild(h('b',null,'BANK OF BOBOR PRODUCTION'));
+  
+  const right = h('div','header-right');
+  const onlineCount = allUsers.filter(u => u.online).length;
+  right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
+  right.appendChild(btn('🔄','btn3',()=>send({type:'refresh'})));
+  right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
+  
+  top.appendChild(right);
+  header.appendChild(top);
+  app.appendChild(header);
+
+  const nav = h('nav');
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['profile','Профиль']];
+  if(me.role==='admin') {
+    tabs.push(['admin','Админка']);
+    tabs.push(['info','Инфа']);
+  }
+  tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
+    screen=id;
+    if(id==='history'){ historyLoaded=false; send({type:'history'}); }
+    if(id==='admin' || id==='info'){ send({type:'admin_allusers'}); }
+    if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
+    render();
+  })); });
+  app.appendChild(nav);
+
+  if(screen==='dashboard') drawDashBody(app);
+  else if(screen==='wallet') drawWalletBody(app);
+  else if(screen==='convert') drawConvertBody(app);
+  else if(screen==='transfer') drawTransferBody(app);
+  else if(screen==='vault') drawVaultBody(app);
+  else if(screen==='ttfbl') drawTtfblBody(app);
+  else if(screen==='history') drawHistoryBody(app);
+  else if(screen==='users') drawUsersBody(app);
+  else if(screen==='profile') drawProfileBody(app);
+  else if(screen==='info') drawInfoBody(app);
+  else if(screen==='admin') drawAdminBody(app);
+}
+
+function drawDashBody(app) {
+  const t = accounts.TTFBL.bal;
+  const c1 = h('div','card ttfbl');
+  c1.appendChild(h('div','tag','◈ TTFBL — основная'));
+  c1.appendChild(h('div','muted','Баланс в TTFBL'));
+  c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
+  c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу банка'));
+  app.appendChild(c1);
+
+  let total = 0;
+  for(const c of CUR) total += c==='RUB' ? accounts[c].bal : convert(accounts[c].bal, c, 'RUB');
+  const c2 = h('div','card');
+  c2.appendChild(h('div','muted','Всего в RUB'));
+  c2.appendChild(h('div','big', fmt(total,'RUB')));
+  app.appendChild(c2);
+
+  const c3 = h('div','card');
+  c3.appendChild(h('h2',null,'Все валюты'));
+  for(const c of CUR) {
+    const row = h('div','rowline');
+    const lbl = h('span', c==='TTFBL'?'green':'', (c==='TTFBL'?'◈ ':'')+c);
+    row.appendChild(lbl);
+    row.appendChild(h('span',null,fmt(accounts[c].bal,c)));
+    c3.appendChild(row);
+  }
+  app.appendChild(c3);
+}
+
+function drawWalletBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Кошелёк'));
+  for(const cur of CUR) {
+    const row = h('div','rowline');
+    const lbl = h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num);
+    row.appendChild(lbl);
+    row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
+    c.appendChild(row);
+  }
+  app.appendChild(c);
+}
+
+function drawVaultBody(app) {
+  const c = h('div','card ttfbl');
+  c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
+  c.appendChild(h('div','muted','Каждую неделю начисляется 5 TTFBL. Забрать можно в любой момент.'));
+  c.appendChild(h('div','muted','На вкладе:'));
+  c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));
+  
+  let amt='100';
+  c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
+  c.appendChild(btn('Положить на вклад','btn2',()=>send({type:'vault_deposit', amt})));
+  c.appendChild(h('span',null,' '));
+  c.appendChild(btn('Забрать с вклада','btn3',()=>send({type:'vault_withdraw', amt})));
+  app.appendChild(c);
+}
+
+function drawConvertBody(app) {
+  const st = convertState;
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Конвертация'));
+  const grid = h('div','grid2');
+  grid.appendChild(sel(st.from, v=>{st.from=v;render();}));
+  grid.appendChild(sel(st.to, v=>{st.to=v;render();}));
+  c.appendChild(grid);
+  c.appendChild(input('Сумма', st.amt, v=>{st.amt=v;render();}));
+  const fromBal = accounts[st.from].bal;
+  c.appendChild(h('div','muted','Доступно: '+fmt(fromBal,st.from)));
+  c.appendChild(h('div','formula', formula(st.from,st.to)));
+  const v = Number(st.amt);
+  if(v>0 && st.from!==st.to){
+    const m = toMinor(v, st.from);
+    const res = convert(m, st.from, st.to);
+    const p = h('div','converted','→ Получишь: '+fmt(res, st.to));
+    if(m>fromBal) p.textContent += ' (недостаточно)';
+    c.appendChild(p);
+  }
+  c.appendChild(btn('Конвертировать','btn',()=>send({type:'convert', from:st.from, to:st.to, amt:st.amt})));
+  app.appendChild(c);
+}
+
+function drawTransferBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Перевод'));
+  c.appendChild(h('div','muted','TTFBL — 0%, фиат — 1%.'));
+  
+  let toEmail = '', cur = 'TTFBL', amt = '100';
+  
+  const selUser = document.createElement('select');
+  selUser.style.marginBottom = '8px';
+  const defOpt = document.createElement('option');
+  defOpt.value = ''; defOpt.textContent = 'Выбери получателя...';
+  selUser.appendChild(defOpt);
+  
+  for(const u of allUsers) {
+    if(u.email === me.email) continue;
+    const o = document.createElement('option');
+    o.value = u.email; 
+    o.textContent = (u.online ? '🟢 ' : '') + u.name + ' (' + u.email + ')';
+    selUser.appendChild(o);
+  }
+  selUser.onchange = () => { toEmail = selUser.value; };
+  c.appendChild(selUser);
+
+  c.appendChild(sel(cur, v=>{cur=v;render();}));
+  c.appendChild(input('Сумма', amt, v=>amt=v));
+  c.appendChild(h('div','muted','Доступно в '+cur+': '+fmt(accounts[cur].bal,cur)));
+  
+  c.appendChild(btn('Перевести','btn',()=>{
+    if(!toEmail) return showToast('Выбери получателя');
+    send({type:'transfer', toEmail, cur, amt});
+  }));
+  app.appendChild(c);
+}
+
+function drawUsersBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Все люди в банке'));
+  c.appendChild(h('div','muted','Всего: '+allUsers.length+' пользователей'));
+  c.appendChild(h('div','muted','В сети сейчас: '+allUsers.filter(u=>u.online).length));
+  
+  const sorted = allUsers.slice().sort((a,b)=> a.online===b.online ? a.name.localeCompare(b.name) : (a.online?-1:1));
+  
+  for(const u of sorted) {
+    const row = h('div','rowline');
+    const left = h('span', null, '');
+    left.appendChild(h('span', u.online?'online-dot':'offline-dot'));
+    left.appendChild(h('b', null, u.name));
+    if (u.email === me.email) left.appendChild(h('span','tag admin',' ЭТО ТЫ'));
+    row.appendChild(left);
+    row.appendChild(h('span','muted', u.email));
+    c.appendChild(row);
+  }
+  app.appendChild(c);
+}
+
+function drawProfileBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Профиль'));
+  
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Email:'));
+  c.lastChild.appendChild(h('b',null, me.email));
+  
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Имя:'));
+  c.lastChild.appendChild(h('b',null, me.name));
+
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Роль:'));
+  c.lastChild.appendChild(h('span', me.role==='admin'?'tag admin':'tag', me.role==='admin'?'ADMIN':'USER'));
+
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Пароль:'));
+  c.lastChild.appendChild(h('b',null, me.pwd || '******'));
+
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Секретное слово:'));
+  c.lastChild.appendChild(h('b',null, me.secret || '******'));
+
+  app.appendChild(c);
+}
+
+function drawInfoBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Инфа: Данные всех пользователей'));
+  c.appendChild(h('div','muted','Здесь видны пароли и секретные слова всех аккаунтов.'));
+  
+  const sorted = adminUsers.slice().sort((a,b)=> a.email.localeCompare(b.email));
+
+  for(const u of sorted) {
+    const block = h('div','user-block');
+    block.appendChild(h('b',null, u.name));
+    
+    const grid = h('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gap = '4px';
+    grid.style.marginTop = '5px';
+    grid.style.fontSize = '13px';
+    
+    grid.innerHTML = `
+      <div class="muted">Почта:</div><div>${u.email}</div>
+      <div class="muted">Пароль:</div><div style="color:#FF3D00">${u.pwd || '—'}</div>
+      <div class="muted">Секрет:</div><div style="color:#C6FF00">${u.secret || '—'}</div>
+      <div class="muted">Роль:</div><div>${u.role.toUpperCase()}</div>
+    `;
+    block.appendChild(grid);
+    c.appendChild(block);
+  }
+  app.appendChild(c);
+}
+
+function drawTtfblBody(app) {
+  const t = accounts.TTFBL.bal;
+  const c1 = h('div','card ttfbl');
+  c1.appendChild(h('div','tag','◈ TTFBL — основная'));
+  c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
+  c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу'));
+  app.appendChild(c1);
+}
+
+function drawHistoryBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'История операций'));
+  if(!historyLoaded){ c.appendChild(h('div','muted','Загрузка...')); }
+  else if(!lastHistory.length){ c.appendChild(h('div','muted','Пусто.')); }
+  else {
+    for(let i=lastHistory.length-1; i>=0; i--){
+      const t = lastHistory[i];
+      const row = h('div','rowline');
+      let dir = '·';
+      if(t.from_email === me.email) dir = '→ '+t.to_email;
+      else if(t.to_email === me.email) dir = '← '+t.from_email;
+      else dir = 'конвертация';
+      const left = h('span',null, t.descr+' ('+dir+')');
+      left.appendChild(h('div','muted', t.date));
+      row.appendChild(left);
+      row.appendChild(h('span',null, (t.from_email===me.email?'−':'+')+' '+fmt(Number(t.amt), t.cur)));
+      c.appendChild(row);
+    }
+  }
+  app.appendChild(c);
+}
+
+function drawAdminBody(app) {
+  if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Админка (Счета и Баны)'));
+  
+  const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
+
+  for(const u of sorted){
+    const block = h('div','user-block');
+    const head = h('div','rowline');
+    const left = h('span',null,'');
+    left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
+    if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
+    head.appendChild(left);
+    block.appendChild(head);
+
+    const banRow = h('div', 'row');
+    banRow.style.marginBottom = '8px';
+    if (u.banned_until && new Date(u.banned_until) > new Date()) {
+      banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU') + '  '));
+      banRow.appendChild(btn('Разбанить', 'btn2 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+    } else {
+      banRow.appendChild(h('span', 'muted', 'Бан: '));
+      banRow.appendChild(btn('1ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('24ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Навсегда', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+    }
+    block.appendChild(banRow);
+
+    for(const cur of CUR){
+      const acc = u.accounts[cur];
+      const row = h('div','acc-row');
+      row.appendChild(h('div',null,(cur==='TTFBL'?'◈ ':'')+cur+' · ' + fmt(acc.bal,cur) + ' (Вклад: '+fmt(acc.vault_bal || 0, cur)+')'));
+      
+      const actions = h('div'); actions.style.marginTop='4px';
+      const amtIn = document.createElement('input');
+      amtIn.placeholder = 'Сумма';
+      amtIn.style.cssText='width:100px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
+      actions.appendChild(amtIn);
+      
+      actions.appendChild(btn('+','btn2',()=>{ if(amtIn.value>0) { send({type:'admin_mint', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      actions.appendChild(btn('−','btn3',()=>{ if(amtIn.value>0) { send({type:'admin_burn', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      
+      row.appendChild(actions);
+      block.appendChild(row);
+    }
+    c.appendChild(block);
+  }
+  app.appendChild(c);
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if(!app) return;
+  clear(app);
+  if(!me){
+    if(screen==='register') drawRegister();
+    else drawLogin();
+  } else {
+    drawDashboard();
+  }
+  if(toastText) app.appendChild(h('div','toast', toastText));
+}
+
+window.onerror = function(msg, url, line){
+  const e = document.getElementById('err');
+  e.style.display='block';
+  e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
+};
+
+connect();
+</script>
+</body>
+</html>

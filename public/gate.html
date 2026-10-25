@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Проверка BOBOR-ID</title>
+<style>
+  body{background:#0B0B0F;color:#fff;font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;text-align:center;padding:20px;box-sizing:border-box}
+  .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:40px 20px;max-width:400px;width:100%}
+  h1{color:#ff5555;font-size:26px;margin-top:0}
+  p{color:#8A8A93;font-size:15px;margin-bottom:25px}
+  .btn{background:#C6FF00;color:#000;border:0;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;width:100%;margin-bottom:10px}
+  .btn2{background:rgba(255,255,255,0.1);color:#fff;border:0;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;width:100%}
+</style>
+</head>
+<body>
+<div class="card" id="screen">
+  <h1>Проверка...</h1>
+</div>
+<script>
+  // Берем email, который банк сохранил при входе
+  var savedEmail = localStorage.getItem('bobor_email');
+  
+  if (!savedEmail) {
+    // Если ты не залогинен, пускаем в банк (он сам попросит логин)
+    window.location.href = '/index.html';
+  } else {
+    // Если залогинен, стучимся в BOBOR-ID
+    fetch('https://bobor-passport.onrender.com/api/approval/' + savedEmail)
+      .then(r => r.json())
+      .then(data => {
+        if (data.approved) {
+          // Паспорт есть! Пускаем в старый добрый банк
+          window.location.href = '/index.html';
+        } else {
+          // Паспорта нет. Показываем блок.
+          document.getElementById('screen').innerHTML = `
+            <h1>🚫 ДОСТУП ЗАКРЫТ</h1>
+            <p>Ваш BOBOR-ID не подтвержден. Пройдите верификацию в системе BOBOR-ID.</p>
+            <button class="btn" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
+            <button class="btn2" onclick="location.reload()">Я подтвердил, проверить</button>
+          `;
+        }
+      })
+      .catch(() => {
+        // Если BOBOR-ID спит, не блокируем насмерть, но просим проверить позже
+        document.getElementById('screen').innerHTML = `
+          <h1>⚠️ Ошибка связи</h1>
+          <p>Сервер BOBOR-ID не отвечает. Попробуйте обновить страницу через минуту.</p>
+          <button class="btn2" onclick="location.reload()">Обновить</button>
+        `;
+      });
+  }
+</script>
+</body>
+</html>

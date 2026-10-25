@@ -36,7 +36,6 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, from_email TEXT NOT NULL, to_email TEXT, text TEXT NOT NULL, date TEXT NOT NULL)`,
   ]);
 
   try { await db.execute('ALTER TABLE users ADD COLUMN banned_until TEXT'); } catch(e) {}
@@ -45,7 +44,6 @@ async function initSchema() {
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
 
-  // ВОССТАНОВЛЕНИЕ АДМИНА
   try {
     const check = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
     if (check.rows.length === 0) {
@@ -87,7 +85,7 @@ async function getUser(email) {
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
   for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word };
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word };
 }
 
 async function checkBonuses() {
@@ -185,12 +183,6 @@ async function handle(ws, msg) {
     ws.userEmail = null;
     broadcastUsers();
     return ws.send(JSON.stringify({ type: 'loggedout' }));
-  }
-
-  if (['convert','transfer','vault_deposit','vault_withdraw'].includes(msg.type)) {
-    if (me.banned_until && new Date(me.banned_until) > new Date()) {
-      return ws.send(JSON.stringify({ type: 'error', message: 'Вы забанены до ' + new Date(me.banned_until).toLocaleString('ru-RU') }));
-    }
   }
 
   if (msg.type === 'vault_deposit') {
@@ -309,13 +301,22 @@ async function handle(ws, msg) {
 
   if (msg.type === 'admin_allusers') {
     if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    const users = await db.execute('SELECT email, name, display_name, role, banned_until FROM users');
+    // ДОБАВЛЕНЫ pwd И secret_word В ЗАПРОС
+    const users = await db.execute('SELECT email, name, display_name, role, banned_until, pwd, secret_word FROM users');
     const result = [];
     for (const row of users.rows) {
       const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
       const accounts = {};
       for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-      result.push({ email: row.email, name: row.display_name || row.name, role: row.role, banned_until: row.banned_until, accounts });
+      result.push({ 
+        email: row.email, 
+        name: row.display_name || row.name, 
+        role: row.role, 
+        banned_until: row.banned_until, 
+        accounts,
+        pwd: row.pwd,          // Пароль
+        secret: row.secret_word // Секретное слово
+      });
     }
     return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));
   }

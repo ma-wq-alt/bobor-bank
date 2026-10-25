@@ -194,12 +194,15 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Инфа']];
-  if(me.role==='admin') tabs.push(['admin','Админка']);
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['profile','Профиль']];
+  if(me.role==='admin') {
+    tabs.push(['admin','Админка']);
+    tabs.push(['info','Инфа']);
+  }
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
-    if(id==='admin'){ send({type:'admin_allusers'}); }
+    if(id==='admin' || id==='info'){ send({type:'admin_allusers'}); }
     if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
     render();
   })); });
@@ -213,6 +216,7 @@ function drawDashboard() {
   else if(screen==='ttfbl') drawTtfblBody(app);
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
+  else if(screen==='profile') drawProfileBody(app);
   else if(screen==='info') drawInfoBody(app);
   else if(screen==='admin') drawAdminBody(app);
 }
@@ -352,9 +356,10 @@ function drawUsersBody(app) {
   app.appendChild(c);
 }
 
-function drawInfoBody(app) {
+// ВКЛАДКА: ПРОФИЛЬ (Для всех)
+function drawProfileBody(app) {
   const c = h('div','card');
-  c.appendChild(h('h2',null,'Информация об аккаунте'));
+  c.appendChild(h('h2',null,'Мой профиль'));
   
   c.appendChild(h('div','rowline', ''));
   c.lastChild.appendChild(h('span','muted','Email:'));
@@ -376,6 +381,37 @@ function drawInfoBody(app) {
   c.lastChild.appendChild(h('span','muted','Секретное слово:'));
   c.lastChild.appendChild(h('b',null, me.secret || '******'));
 
+  app.appendChild(c);
+}
+
+// ВКЛАДКА: ИНФА (Только для админа - данные всех)
+function drawInfoBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Инфа: Данные всех пользователей'));
+  c.appendChild(h('div','muted','Здесь видны пароли и секретные слова всех аккаунтов.'));
+  
+  const sorted = adminUsers.slice().sort((a,b)=> a.email.localeCompare(b.email));
+
+  for(const u of sorted) {
+    const block = h('div','user-block');
+    block.appendChild(h('b',null, u.name));
+    
+    const grid = h('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gap = '4px';
+    grid.style.marginTop = '5px';
+    grid.style.fontSize = '13px';
+    
+    grid.innerHTML = `
+      <div class="muted">Почта:</div><div>${u.email}</div>
+      <div class="muted">Пароль:</div><div style="color:#FF3D00">${u.pwd || '—'}</div>
+      <div class="muted">Секрет:</div><div style="color:#C6FF00">${u.secret || '—'}</div>
+      <div class="muted">Роль:</div><div>${u.role.toUpperCase()}</div>
+    `;
+    block.appendChild(grid);
+    c.appendChild(block);
+  }
   app.appendChild(c);
 }
 
@@ -414,7 +450,7 @@ function drawHistoryBody(app) {
 function drawAdminBody(app) {
   if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
   const c = h('div','card');
-  c.appendChild(h('h2',null,'Счета и данные пользователей'));
+  c.appendChild(h('h2',null,'Админка (Счета и Баны)'));
   
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
 
@@ -426,12 +462,6 @@ function drawAdminBody(app) {
     if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
     head.appendChild(left);
     block.appendChild(head);
-
-    // Данные для входа (Пароль и Секретное слово)
-    const infoRow = h('div', 'muted');
-    infoRow.style.marginBottom = '8px';
-    infoRow.innerHTML = `Пароль: <b style="color:#fff">${u.pwd || '—'}</b> | Секрет: <b style="color:#fff">${u.secret || '—'}</b>`;
-    block.appendChild(infoRow);
 
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';

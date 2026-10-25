@@ -31,7 +31,7 @@ function convertMinor(m, f, t) {
 }
 function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 8999999999); }
 
-// ПРАВИЛЬНАЯ ГЕНЕРАЦИЯ КОДА (5 цифр + первая буква имени)
+// Генерация кода
 function generatePassCode(name) {
   const digits = Math.floor(10000 + Math.random() * 89999);
   const letter = (name && name.length > 0) ? name[0].toLowerCase() : 'x';
@@ -58,7 +58,7 @@ async function initSchema() {
     if (check.rows.length === 0) {
       await db.execute({
         sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, pass_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб', '14958h']
+        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб', '14958м']
       });
       for (const c of CUR) {
         const start = (c === 'TTFBL') ? toMinor(50000, 'TTFBL') : 0;
@@ -68,14 +68,29 @@ async function initSchema() {
         });
       }
     } else {
-      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin', pass_code = '14958h' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
+      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin', pass_code = '14958м' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
     }
   } catch(e) {}
 
-  // Принудительно ставим код для Бульбоеда (или любому, у кого он пустой/неправильный)
+  // ЖЕСТКОЕ ОБНОВЛЕНИЕ КОДА ДЛЯ БУЛЬБОЕДА
   try {
-    await db.execute({ sql: "UPDATE users SET pass_code = '13987b' WHERE email = 'mardanovtri@gmail.com'" });
+    await db.execute({ sql: "UPDATE users SET pass_code = '13987с' WHERE email = 'mardanovtri@gmail.com'" });
   } catch(e) {}
+
+  // ПРИНУДИТЕЛЬНАЯ ГЕНЕРАЦИЯ КОДОВ ДЛЯ ВСЕХ ОСТАЛЬНЫХ (у кого код пустой или старый)
+  try {
+    const users = await db.execute('SELECT email, name, display_name, pass_code FROM users');
+    for (const u of users.rows) {
+      if (u.email === ADMIN_EMAIL || u.email === 'mardanovtri@gmail.com') continue;
+      // Если кода нет, или он не заканчивается на правильную букву, или он короткий
+      const expectedLetter = (u.display_name || u.name || 'x')[0].toLowerCase();
+      if (!u.pass_code || u.pass_code.length !== 6 || !u.pass_code.endsWith(expectedLetter)) {
+        const newCode = generatePassCode(u.display_name || u.name);
+        await db.execute({ sql: 'UPDATE users SET pass_code = ? WHERE email = ?', args: [newCode, u.email] });
+      }
+    }
+    console.log('✅ Коды удостоверений проверены и обновлены');
+  } catch(e) { console.log('Ошибка обновления кодов:', e.message); }
 }
 
 async function createUser(email, pwd, name, role, display_name, secret_word) {

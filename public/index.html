@@ -199,7 +199,7 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Инфа']];
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Новости'],['profile','Профиль']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
@@ -220,6 +220,7 @@ function drawDashboard() {
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
   else if(screen==='info') drawInfoBody(app);
+  else if(screen==='profile') drawProfileBody(app);
   else if(screen==='admin') drawAdminBody(app);
 }
 
@@ -360,7 +361,7 @@ function drawUsersBody(app) {
 
 function drawInfoBody(app) {
   const c = h('div','card');
-  c.appendChild(h('h2',null,'📢 Инфа (Новости)'));
+  c.appendChild(h('h2',null,'📢 Новости'));
   
   const box = h('div');
   box.style.maxHeight = '300px';
@@ -394,6 +395,40 @@ function drawInfoBody(app) {
     }));
   }
   app.appendChild(c);
+}
+
+// НОВАЯ ВКЛАДКА: ПРОФИЛЬ (Инфа)
+function drawProfileBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Информация об аккаунте'));
+  
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Email:'));
+  c.lastChild.appendChild(h('b',null, me.email));
+  
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Имя:'));
+  c.lastChild.appendChild(h('b',null, me.name));
+
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Роль:'));
+  c.lastChild.appendChild(h('span', me.role==='admin'?'tag admin':'tag', me.role==='admin'?'ADMIN':'USER'));
+
+  c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Секретное слово:'));
+  c.lastChild.appendChild(h('span',null, '••••••'));
+
+  app.appendChild(c);
+
+  const c2 = h('div','card');
+  c2.appendChild(h('h3',null,'Сменить секретное слово'));
+  let newSec = '';
+  c2.appendChild(input('Новое секретное слово', '', v=>newSec=v, 'password'));
+  c2.appendChild(btn('Обновить', 'btn', () => {
+    if (newSec.length < 2) return showToast('Мин. 2 символа');
+    showToast('В этой демо-версии смена секретного слова недоступна');
+  }));
+  app.appendChild(c2);
 }
 
 function drawTtfblBody(app) {

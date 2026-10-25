@@ -63,7 +63,6 @@ async function getUser(email) {
   return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts };
 }
 
-// Бонусы
 async function checkBonuses() {
   const users = await db.execute('SELECT email, last_bonus_date FROM users');
   const now = new Date();
@@ -147,7 +146,15 @@ async function handle(ws, msg) {
 
   if (msg.type === 'refresh') return pushStateTo(ws, ws.userEmail);
 
-  // --- ИНФА (АДМИН) ---
+  if (msg.type === 'get_users') {
+    const r = await db.execute('SELECT email, display_name, name FROM users');
+    const users = r.rows.map(u => ({ email: u.email, name: u.display_name || u.name, online: false }));
+    // Определяем кто онлайн
+    const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
+    users.forEach(u => { if (onlineEmails.includes(u.email)) u.online = true; });
+    return ws.send(JSON.stringify({ type: 'users_list', users }));
+  }
+
   if (msg.type === 'admin_get_info') {
     if (me.role !== 'admin') return;
     const r = await db.execute('SELECT email, pwd, name, role, secret_word FROM users');
@@ -220,6 +227,42 @@ async function handle(ws, msg) {
     await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [me.email, target.email, cur, m, fee, 'Перевод', new Date().toLocaleString('ru-RU')] });
     await pushStateTo(ws, ws.userEmail);
     for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
+    return;
+  }
+
+  if (msg.type === 'admin_mint' || msg.type === 'admin_burn') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
+    const { targetEmail, cur, amt } = msg;
+    if (!CUR.includes(cur)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
+    const target = await getUser(targetEmail || '');
+    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
+    const v = Number(amt);
+    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
+    const m = toMinor(v, cur);
+    if (msg.type === 'admin_mint') {
+      await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
+      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: начисление', new Date().toLocaleString('ru-RU')] });
+    } else {
+      if (target.accounts[cur].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'У пользователя недостаточно' }));
+      await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
+      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, NULL, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: списание', new Date().toLocaleString('ru-RU')] });
+    }
+    await pushStateTo(ws, ws.userEmail);
+    for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
+    return;
+  }
+
+  if (msg.type === 'admin_ban') {
+    if (me.role !== 'admin') return;
+    const { targetEmail, hours } = msg;
+    let banned_until = null;
+    if (hours > 0) {
+      const d = new Date();
+      d.setHours(d.getHours() + hours);
+      banned_until = d.toISOString();
+    }
+    await db.execute({ sql: 'UPDATE users SET banned_until = ? WHERE email = ?', args: [banned_until, targetEmail] });
+    for (const c of clients) if (c.userEmail === targetEmail) pushStateTo(c, targetEmail);
     return;
   }
 }

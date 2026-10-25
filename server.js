@@ -31,6 +31,13 @@ function convertMinor(m, f, t) {
 }
 function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 8999999999); }
 
+// ПРАВИЛЬНАЯ ГЕНЕРАЦИЯ КОДА (5 цифр + первая буква имени)
+function generatePassCode(name) {
+  const digits = Math.floor(10000 + Math.random() * 89999);
+  const letter = (name && name.length > 0) ? name[0].toLowerCase() : 'x';
+  return `${digits}${letter}`;
+}
+
 async function initSchema() {
   await db.batch([
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
@@ -42,14 +49,16 @@ async function initSchema() {
   try { await db.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN secret_word TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN pass_code TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
 
+  // Восстановление админа и его кода
   try {
     const check = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
     if (check.rows.length === 0) {
       await db.execute({
-        sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word) VALUES (?, ?, ?, ?, ?, ?)',
-        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб']
+        sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, pass_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб', '14958h']
       });
       for (const c of CUR) {
         const start = (c === 'TTFBL') ? toMinor(50000, 'TTFBL') : 0;
@@ -59,15 +68,21 @@ async function initSchema() {
         });
       }
     } else {
-      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
+      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin', pass_code = '14958h' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
     }
+  } catch(e) {}
+
+  // Принудительно ставим код для Бульбоеда (или любому, у кого он пустой/неправильный)
+  try {
+    await db.execute({ sql: "UPDATE users SET pass_code = '13987b' WHERE email = 'mardanovtri@gmail.com'" });
   } catch(e) {}
 }
 
 async function createUser(email, pwd, name, role, display_name, secret_word) {
+  const code = generatePassCode(name);
   await db.execute({
-    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [email, pwd, name, role, display_name, secret_word, new Date().toISOString()],
+    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date, pass_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    args: [email, pwd, name, role, display_name, secret_word, new Date().toISOString(), code],
   });
   for (const c of CUR) {
     const start = (c === 'TTFBL') ? toMinor(START_TTFBL, 'TTFBL') : 0;
@@ -85,7 +100,14 @@ async function getUser(email) {
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
   for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word };
+  
+  let passCode = u.pass_code;
+  if (!passCode) {
+    passCode = generatePassCode(u.display_name || u.name);
+    await db.execute({ sql: 'UPDATE users SET pass_code = ? WHERE email = ?', args: [passCode, u.email] });
+  }
+
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, pass_code: passCode };
 }
 
 async function checkBonuses() {
@@ -301,8 +323,7 @@ async function handle(ws, msg) {
 
   if (msg.type === 'admin_allusers') {
     if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
-    // ДОБАВЛЕНЫ pwd И secret_word В ЗАПРОС
-    const users = await db.execute('SELECT email, name, display_name, role, banned_until, pwd, secret_word FROM users');
+    const users = await db.execute('SELECT email, name, display_name, role, banned_until, pwd, secret_word, pass_code FROM users');
     const result = [];
     for (const row of users.rows) {
       const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
@@ -314,8 +335,9 @@ async function handle(ws, msg) {
         role: row.role, 
         banned_until: row.banned_until, 
         accounts,
-        pwd: row.pwd,          // Пароль
-        secret: row.secret_word // Секретное слово
+        pwd: row.pwd,
+        secret: row.secret_word,
+        pass_code: row.pass_code || '----'
       });
     }
     return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));

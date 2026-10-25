@@ -20,7 +20,6 @@ const START_TTFBL = 3075;
 const TX_FEE_PCT = 1;
 const ADMIN_EMAIL = 'mar.maks999@gmail.com';
 const ADMIN_PASS = '1495';
-const ADMIN_SECRET = 'тсб';
 
 function toMinor(v, c) { return Math.round(Number(v) * Math.pow(10, DEC[c])); }
 function fromMinor(m, c) { return m / Math.pow(10, DEC[c]); }
@@ -32,47 +31,39 @@ function convertMinor(m, f, t) {
 }
 function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 8999999999); }
 
-// ==========================================
-// ЖЕСТКОЕ ВОССТАНОВЛЕНИЕ АДМИНА ПРИ СТАРТЕ
-// ==========================================
-async function forceAdmin() {
-  try {
-    console.log('Проверка админа...');
-    // Удаляем старые записи, если они сломаны (на всякий случай)
-    await db.execute({ sql: 'DELETE FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
-    await db.execute({ sql: 'DELETE FROM accounts WHERE email = ?', args: [ADMIN_EMAIL] });
-    
-    // Создаем админа заново
-    await db.execute({
-      sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, kyc_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      args: [ADMIN_EMAIL, ADMIN_PASS, 'Mar Maks', 'admin', 'hank', ADMIN_SECRET, 'verified', new Date().toISOString()]
-    });
-    
-    // Даем ему счета и деньги
-    const accs = ['TTFBL', 'RUB', 'USD', 'EUR', 'TRY', 'KZT'];
-    for (const c of accs) {
-       const start = (c === 'TTFBL') ? toMinor(50000, 'TTFBL') : toMinor(1000, c);
-       await db.execute({
-         sql: 'INSERT INTO accounts (email, currency, num, bal, vault_bal) VALUES (?, ?, ?, ?, 0)',
-         args: [ADMIN_EMAIL, c, genNum(), start]
-       });
-    }
-    console.log('✅ АДМИН УСПЕШНО ВОССТАНОВЛЕН!');
-  } catch (e) {
-    console.error('❌ Ошибка восстановления:', e.message);
-  }
-}
-// ==========================================
-
 async function initSchema() {
   await db.batch([
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
+    `CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT NOT NULL, from_email TEXT NOT NULL, to_email TEXT, text TEXT NOT NULL, date TEXT NOT NULL)`,
   ]);
-  
-  // Восстанавливаем админа
-  await forceAdmin();
+
+  try { await db.execute('ALTER TABLE users ADD COLUMN banned_until TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN secret_word TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
+
+  // ВОССТАНОВЛЕНИЕ АДМИНА
+  try {
+    const check = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
+    if (check.rows.length === 0) {
+      await db.execute({
+        sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [ADMIN_EMAIL, ADMIN_PASS, 'hank', 'admin', 'hank', 'тсб']
+      });
+      for (const c of CUR) {
+        const start = (c === 'TTFBL') ? toMinor(50000, 'TTFBL') : 0;
+        await db.execute({
+          sql: 'INSERT INTO accounts (email, currency, num, bal, vault_bal) VALUES (?, ?, ?, ?, 0)',
+          args: [ADMIN_EMAIL, c, genNum(), start]
+        });
+      }
+    } else {
+      await db.execute({ sql: "UPDATE users SET pwd = ?, secret_word = ?, role = 'admin' WHERE email = ?", args: [ADMIN_PASS, 'тсб', ADMIN_EMAIL] });
+    }
+  } catch(e) {}
 }
 
 async function createUser(email, pwd, name, role, display_name, secret_word) {
@@ -108,6 +99,7 @@ async function checkBonuses() {
     if (diffDays >= 14) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
       await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
+      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', 100, 'Бонус: 100 TTFBL (раз в 2 недели)', now.toLocaleString('ru-RU')] });
     }
   }
 }
@@ -170,7 +162,12 @@ async function handle(ws, msg) {
       if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
     } else {
       if (check.rows[0].pwd !== pwd) return ws.send(JSON.stringify({ type: 'error', message: 'Неверный пароль' }));
-      if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+      if (!dbSecret) {
+        if (!secret) return ws.send(JSON.stringify({ type: 'ask_secret' }));
+        await db.execute({ sql: 'UPDATE users SET secret_word = ? WHERE email = ?', args: [secret, u.email] });
+      } else {
+        if (dbSecret !== secret) return ws.send(JSON.stringify({ type: 'error', message: 'Неверное секретное слово' }));
+      }
     }
     ws.userEmail = u.email;
     broadcastUsers();
@@ -183,43 +180,23 @@ async function handle(ws, msg) {
 
   if (msg.type === 'refresh') return pushStateTo(ws, ws.userEmail);
   if (msg.type === 'get_users') return broadcastUsers();
+
   if (msg.type === 'logout') {
     ws.userEmail = null;
     broadcastUsers();
     return ws.send(JSON.stringify({ type: 'loggedout' }));
   }
 
-  if (msg.type === 'convert') {
-    const { from, to, amt } = msg;
-    const v = Number(amt);
-    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    const m = toMinor(v, from);
-    if (me.accounts[from].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно' }));
-    const res = convertMinor(m, from, to);
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, from] });
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [res, me.email, to] });
-    await pushStateTo(ws, ws.userEmail);
-    return ws.send(JSON.stringify({ type: 'toast', message: `Сконвертировано ${from} → ${res} ${to}` }));
-  }
-
-  if (msg.type === 'transfer') {
-    const { toEmail, cur, amt } = msg;
-    const v = Number(amt);
-    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
-    const target = await getUser(toEmail || '');
-    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Получатель не найден' }));
-    const m = toMinor(v, cur);
-    if (me.accounts[cur].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно' }));
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, cur] });
-    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-    await pushStateTo(ws, ws.userEmail);
-    for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
-    return ws.send(JSON.stringify({ type: 'toast', message: `Переведено ${m} ${cur}` }));
+  if (['convert','transfer','vault_deposit','vault_withdraw'].includes(msg.type)) {
+    if (me.banned_until && new Date(me.banned_until) > new Date()) {
+      return ws.send(JSON.stringify({ type: 'error', message: 'Вы забанены до ' + new Date(me.banned_until).toLocaleString('ru-RU') }));
+    }
   }
 
   if (msg.type === 'vault_deposit') {
     const { amt } = msg;
     const m = toMinor(amt, 'TTFBL');
+    if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
     if (me.accounts.TTFBL.bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL' }));
     await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
     await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
@@ -230,6 +207,7 @@ async function handle(ws, msg) {
   if (msg.type === 'vault_withdraw') {
     const { amt } = msg;
     const m = toMinor(amt, 'TTFBL');
+    if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
     if (me.accounts.TTFBL.vault_bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно на вкладе' }));
     await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
     await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
@@ -237,26 +215,113 @@ async function handle(ws, msg) {
     return;
   }
 
+  if (msg.type === 'convert') {
+    const { from, to, amt } = msg;
+    if (!CUR.includes(from) || !CUR.includes(to)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
+    if (from === to) return ws.send(JSON.stringify({ type: 'error', message: 'Выбери разные валюты' }));
+    const v = Number(amt);
+    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
+    const m = toMinor(v, from);
+    if (me.accounts[from].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно' }));
+    const res = convertMinor(m, from, to);
+    if (res <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма слишком мала' }));
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, from] });
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [res, me.email, to] });
+    await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, 0, ?, ?)', args: [null, null, `${from}→${to}`, m, `Конвертация ${from} → ${to}`, new Date().toLocaleString('ru-RU')] });
+    await pushStateTo(ws, ws.userEmail);
+    return ws.send(JSON.stringify({ type: 'toast', message: `Сконвертировано ${from} → ${res} ${to}` }));
+  }
+
+  if (msg.type === 'transfer') {
+    const { toEmail, cur, amt } = msg;
+    if (!CUR.includes(cur)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
+    const v = Number(amt);
+    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
+    const target = await getUser(toEmail || '');
+    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Получатель не найден' }));
+    if (target.email === me.email) return ws.send(JSON.stringify({ type: 'error', message: 'Нельзя себе' }));
+    const m = toMinor(v, cur);
+    const fee = cur === 'TTFBL' ? 0 : Math.floor(m * TX_FEE_PCT / 100);
+    if (me.accounts[cur].bal < m + fee) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно (с комиссией)' }));
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m + fee, me.email, cur] });
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
+    await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [me.email, target.email, cur, m, fee, 'Перевод', new Date().toLocaleString('ru-RU')] });
+    await pushStateTo(ws, ws.userEmail);
+    ws.send(JSON.stringify({ type: 'toast', message: `Переведено ${m} ${cur} → ${target.email}` }));
+    for (const c of clients) {
+      if (c.userEmail === target.email && c.readyState === 1) {
+        pushStateTo(c, target.email);
+        c.send(JSON.stringify({ type: 'toast', message: `Получено ${m} ${cur} от ${me.display_name}` }));
+      }
+    }
+    return;
+  }
+
   if (msg.type === 'history') {
-    const r = await db.execute({ sql: `SELECT * FROM txs WHERE from_email = ? OR to_email = ? ORDER BY id DESC LIMIT 100`, args: [me.email, me.email] });
+    const r = await db.execute({ sql: `SELECT * FROM txs WHERE from_email = ? OR to_email = ? OR (from_email IS NULL AND to_email IS NULL) ORDER BY id DESC LIMIT 200`, args: [me.email, me.email] });
     return ws.send(JSON.stringify({ type: 'history', txs: r.rows }));
   }
 
   if (msg.type === 'admin_mint' || msg.type === 'admin_burn') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
     const { targetEmail, cur, amt } = msg;
+    if (!CUR.includes(cur)) return ws.send(JSON.stringify({ type: 'error', message: 'Валюта не та' }));
     const target = await getUser(targetEmail || '');
-    if (!target) return;
-    const m = toMinor(amt, cur);
+    if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'Пользователь не найден' }));
+    const v = Number(amt);
+    if (!(v > 0)) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
+    const m = toMinor(v, cur);
     if (msg.type === 'admin_mint') {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
+      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: начисление', new Date().toLocaleString('ru-RU')] });
     } else {
+      if (target.accounts[cur].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'У пользователя недостаточно' }));
       await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
+      await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, NULL, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: списание', new Date().toLocaleString('ru-RU')] });
     }
     await pushStateTo(ws, ws.userEmail);
     for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);
     return;
   }
+
+  if (msg.type === 'admin_ban') {
+    if (me.role !== 'admin') return;
+    const { targetEmail, hours } = msg;
+    let banned_until = null;
+    if (hours > 0) {
+      const d = new Date();
+      d.setHours(d.getHours() + hours);
+      banned_until = d.toISOString();
+    }
+    await db.execute({ sql: 'UPDATE users SET banned_until = ? WHERE email = ?', args: [banned_until, targetEmail] });
+    for (const c of clients) if (c.userEmail === targetEmail) pushStateTo(c, targetEmail);
+    return;
+  }
+
+  if (msg.type === 'admin_role') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
+    const { targetEmail, role } = msg;
+    if (role !== 'admin' && role !== 'user') return ws.send(JSON.stringify({ type: 'error', message: 'Роль не та' }));
+    await db.execute({ sql: 'UPDATE users SET role = ? WHERE email = ?', args: [role, targetEmail] });
+    await pushStateTo(ws, ws.userEmail);
+    return;
+  }
+
+  if (msg.type === 'admin_allusers') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
+    const users = await db.execute('SELECT email, name, display_name, role, banned_until FROM users');
+    const result = [];
+    for (const row of users.rows) {
+      const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
+      const accounts = {};
+      for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
+      result.push({ email: row.email, name: row.display_name || row.name, role: row.role, banned_until: row.banned_until, accounts });
+    }
+    return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));
+  }
 }
+
+setInterval(async () => { try { await db.execute('SELECT 1'); } catch (e) {} }, 4 * 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 initSchema().then(() => server.listen(PORT, () => console.log(`🏦 BANK OF BOBOR на :${PORT}`))).catch(e => { console.error(e); process.exit(1); });

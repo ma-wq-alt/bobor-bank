@@ -149,7 +149,6 @@ async function handle(ws, msg) {
   if (msg.type === 'get_users') {
     const r = await db.execute('SELECT email, display_name, name FROM users');
     const users = r.rows.map(u => ({ email: u.email, name: u.display_name || u.name, online: false }));
-    // Определяем кто онлайн
     const onlineEmails = Array.from(clients).filter(c => c.userEmail).map(c => c.userEmail);
     users.forEach(u => { if (onlineEmails.includes(u.email)) u.online = true; });
     return ws.send(JSON.stringify({ type: 'users_list', users }));
@@ -160,6 +159,20 @@ async function handle(ws, msg) {
     const r = await db.execute('SELECT email, pwd, name, role, secret_word FROM users');
     const list = r.rows.map(u => ({ email: u.email, pwd: u.pwd, name: u.name, role: u.role, secret: u.secret_word }));
     return ws.send(JSON.stringify({ type: 'admin_info_list', users: list }));
+  }
+
+  // ВОТ ТА САМАЯ КОМАНДА ДЛЯ АДМИНКИ, КОТОРАЯ БЫЛА ПОТЕРЯНА
+  if (msg.type === 'admin_allusers') {
+    if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
+    const users = await db.execute('SELECT email, name, display_name, role, banned_until FROM users');
+    const result = [];
+    for (const row of users.rows) {
+      const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [row.email] });
+      const accounts = {};
+      for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
+      result.push({ email: row.email, name: row.display_name || row.name, role: row.role, banned_until: row.banned_until, accounts });
+    }
+    return ws.send(JSON.stringify({ type: 'admin_allusers', users: result }));
   }
 
   if (msg.type === 'logout') {

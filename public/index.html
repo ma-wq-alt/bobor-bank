@@ -25,15 +25,12 @@
   nav button{background:none;border:0;color:#8A8A93;padding:8px 10px;font-size:14px;cursor:pointer;border-radius:8px;font-family:inherit}
   nav button.on{color:#FF3D00;font-weight:bold;background:rgba(255,61,0,.12)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:480px){
-    .grid2{grid-template-columns:1fr}
-    .header-right { flex-direction: column; align-items: flex-end; gap: 4px; }
-  }
+  @media(max-width:480px){ .grid2{grid-template-columns:1fr} .header-right { flex-direction: column; align-items: flex-end; gap: 4px; } }
   .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
   .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
-  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878}
+  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878;cursor:help}
   .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
   .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
   .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
@@ -41,9 +38,6 @@
   .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
-  th { color: #8A8A93; font-weight: normal; }
 </style>
 </head>
 <body>
@@ -57,6 +51,8 @@ const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
 const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
 const START = 3075;
+const ADMIN_EMAIL = 'mar.maks999@gmail.com';
+const NEWS_ID = 'news_channel';
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
@@ -74,10 +70,9 @@ function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
 let ws = null;
 let me = null;
 let accounts = {};
-let screen = 'login';
+let screen = 'dashboard';
 let lastHistory = [];
 let adminUsers = [];
-let adminInfoList = [];
 let allUsers = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
@@ -129,7 +124,6 @@ function connect() {
     else if (m.type === 'toast') { showToast(m.message); }
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
-    else if (m.type === 'admin_info_list') { adminInfoList = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
   };
 }
@@ -142,7 +136,7 @@ function drawLogin() {
   c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
   
   if (askSecretForEmail) {
-    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его для безопасности:'));
+    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его:'));
     let newSecret = '';
     c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
     c.appendChild(btn('Сохранить и войти','btn',()=>{
@@ -202,28 +196,19 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [
-    ['dashboard','Обзор'],
-    ['convert','Конвертация'],
-    ['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],
-    ['history','История'],['users','Люди']
-  ];
-  if(me.role==='admin') {
-    tabs.push(['admin','Админка']);
-    tabs.push(['info','Инфа']);
-  }
-  
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди']];
+  if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
     if(id==='admin'){ send({type:'admin_allusers'}); }
-    if(id==='info'){ send({type:'admin_get_info'}); }
     if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
     render();
   })); });
   app.appendChild(nav);
 
   if(screen==='dashboard') drawDashBody(app);
+  else if(screen==='wallet') drawWalletBody(app);
   else if(screen==='convert') drawConvertBody(app);
   else if(screen==='transfer') drawTransferBody(app);
   else if(screen==='vault') drawVaultBody(app);
@@ -231,7 +216,6 @@ function drawDashboard() {
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
   else if(screen==='admin') drawAdminBody(app);
-  else if(screen==='info') drawInfoBody(app);
 }
 
 function drawDashBody(app) {
@@ -251,15 +235,28 @@ function drawDashBody(app) {
   app.appendChild(c2);
 
   const c3 = h('div','card');
-  c3.appendChild(h('h2',null,'Мои счета (Кошелёк)'));
+  c3.appendChild(h('h2',null,'Все валюты'));
+  for(const c of CUR) {
+    const row = h('div','rowline');
+    const lbl = h('span', c==='TTFBL'?'green':'', (c==='TTFBL'?'◈ ':'')+c);
+    row.appendChild(lbl);
+    row.appendChild(h('span',null,fmt(accounts[c].bal,c)));
+    c3.appendChild(row);
+  }
+  app.appendChild(c3);
+}
+
+function drawWalletBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Кошелёк'));
   for(const cur of CUR) {
     const row = h('div','rowline');
     const lbl = h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num);
     row.appendChild(lbl);
     row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
-    c3.appendChild(row);
+    c.appendChild(row);
   }
-  app.appendChild(c3);
+  app.appendChild(c);
 }
 
 function drawVaultBody(app) {
@@ -404,17 +401,16 @@ function drawAdminBody(app) {
     head.appendChild(left);
     block.appendChild(head);
 
-    // Кнопки бана
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';
     if (u.banned_until && new Date(u.banned_until) > new Date()) {
       banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU') + '  '));
-      banRow.appendChild(btn('Разбанить', 'btn2', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Разбанить', 'btn2 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
     } else {
       banRow.appendChild(h('span', 'muted', 'Бан: '));
-      banRow.appendChild(btn('1ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('24ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('Навсегда', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('1ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('24ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Навсегда', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
     }
     block.appendChild(banRow);
 
@@ -436,38 +432,6 @@ function drawAdminBody(app) {
       block.appendChild(row);
     }
     c.appendChild(block);
-  }
-  app.appendChild(c);
-}
-
-function drawInfoBody(app) {
-  if(me.role !== 'admin') return;
-  const c = h('div','card');
-  c.appendChild(h('h2',null,'Инфа (Все пользователи)'));
-  c.appendChild(h('div','muted','Пароли и секретные слова в открытом виде.'));
-  
-  if(!adminInfoList || !adminInfoList.length) {
-    c.appendChild(h('div','muted','Загрузка...'));
-  } else {
-    const table = document.createElement('table');
-    const thead = document.createElement('thead');
-    thead.innerHTML = `<tr><th>Email</th><th>Пароль</th><th>Ник</th><th>Секрет</th><th>Роль</th></tr>`;
-    table.appendChild(thead);
-    
-    const tbody = document.createElement('tbody');
-    adminInfoList.forEach(u => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${u.email}</td>
-        <td style="color:#ff5555">${u.pwd}</td>
-        <td>${u.name}</td>
-        <td style="color:#C6FF00">${u.secret || '—'}</td>
-        <td>${u.role === 'admin' ? '<span class="tag admin">ADMIN</span>' : 'user'}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody);
-    c.appendChild(table);
   }
   app.appendChild(c);
 }

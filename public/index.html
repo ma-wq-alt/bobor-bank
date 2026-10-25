@@ -203,7 +203,8 @@ function drawDashboard() {
 
   const nav = h('nav');
   const tabs = [
-    ['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],
+    ['dashboard','Обзор'], // Вкладка кошелек убрана
+    ['convert','Конвертация'],
     ['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],
     ['history','История'],['users','Люди']
   ];
@@ -223,7 +224,6 @@ function drawDashboard() {
   app.appendChild(nav);
 
   if(screen==='dashboard') drawDashBody(app);
-  else if(screen==='wallet') drawWalletBody(app);
   else if(screen==='convert') drawConvertBody(app);
   else if(screen==='transfer') drawTransferBody(app);
   else if(screen==='vault') drawVaultBody(app);
@@ -234,6 +234,7 @@ function drawDashboard() {
   else if(screen==='info') drawInfoBody(app);
 }
 
+// ОБЪЕДИНЕННЫЙ ОБЗОР (счета перенесены сюда)
 function drawDashBody(app) {
   const t = accounts.TTFBL.bal;
   const c1 = h('div','card ttfbl');
@@ -251,28 +252,15 @@ function drawDashBody(app) {
   app.appendChild(c2);
 
   const c3 = h('div','card');
-  c3.appendChild(h('h2',null,'Все валюты'));
-  for(const c of CUR) {
-    const row = h('div','rowline');
-    const lbl = h('span', c==='TTFBL'?'green':'', (c==='TTFBL'?'◈ ':'')+c);
-    row.appendChild(lbl);
-    row.appendChild(h('span',null,fmt(accounts[c].bal,c)));
-    c3.appendChild(row);
-  }
-  app.appendChild(c3);
-}
-
-function drawWalletBody(app) {
-  const c = h('div','card');
-  c.appendChild(h('h2',null,'Кошелёк'));
+  c3.appendChild(h('h2',null,'Мои счета (Кошелёк)'));
   for(const cur of CUR) {
     const row = h('div','rowline');
     const lbl = h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num);
     row.appendChild(lbl);
     row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
-    c.appendChild(row);
+    c3.appendChild(row);
   }
-  app.appendChild(c);
+  app.appendChild(c3);
 }
 
 function drawVaultBody(app) {

@@ -12,8 +12,8 @@
   .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  input,select,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
-  input:focus,select:focus,textarea:focus{outline:none;border-color:#FF3D00}
+  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
+  input:focus,select:focus{outline:none;border-color:#FF3D00}
   h1{margin:0 0 6px;font-size:24px}
   h2{margin:0 0 10px;font-size:17px}
   .muted{color:#8A8A93;font-size:13px}
@@ -33,7 +33,7 @@
   #err{color:#ff5555;font-family:monospace;font-size:13px;white-space:pre-wrap;padding:10px;background:#200;border-radius:8px;margin-bottom:12px;display:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(198,255,0,.15);color:#C6FF00}
   .tag.admin{background:rgba(255,61,0,.2);color:#FF3D00}
-  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878;cursor:help}
+  .save{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:bold;background:rgba(0,200,120,.15);color:#00C878}
   .online-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00C878;margin-right:6px}
   .offline-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
   .toast{position:fixed;bottom:16px;right:16px;background:#15151B;border:1px solid #C6FF00;padding:12px 16px;border-radius:12px;max-width:320px;z-index:100}
@@ -41,10 +41,6 @@
   .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
-  .chat-box{display:flex;flex-direction:column;height:300px;overflow-y:auto;background:#000;border-radius:10px;padding:10px;margin-bottom:10px;border:1px solid #26262E}
-  .msg{background:#26262E;padding:8px 12px;border-radius:10px;margin-bottom:8px;max-width:80%;align-self:flex-start}
-  .msg.my{background:#FF3D00;align-self:flex-end;color:#fff}
-  .msg-news{background:rgba(198,255,0,.15);border:1px solid rgba(198,255,0,.3);color:#F5F5F7}
   table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
   th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
   th { color: #8A8A93; font-weight: normal; }
@@ -61,8 +57,6 @@ const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
 const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
 const START = 3075;
-const ADMIN_EMAIL = 'mar.maks999@gmail.com';
-const NEWS_ID = 'news_channel';
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
@@ -89,10 +83,6 @@ let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
 let askSecretForEmail = null;
-
-let currentChatId = null;
-let currentChatMessages = [];
-let newsMessages = [];
 
 let savedEmail = localStorage.getItem('bobor_email');
 let savedSecret = localStorage.getItem('bobor_secret');
@@ -126,7 +116,6 @@ function connect() {
       localStorage.removeItem('bobor_email');
       localStorage.removeItem('bobor_secret');
       askSecretForEmail = null;
-      currentChatId = null;
       render(); 
     }
     else if (m.type === 'ask_secret') { 
@@ -142,25 +131,6 @@ function connect() {
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'admin_info_list') { adminInfoList = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
-    else if (m.type === 'chat_history') { 
-      if (m.chat_id === NEWS_ID) newsMessages = m.messages;
-      else if (m.chat_id === currentChatId) currentChatMessages = m.messages;
-      render(); 
-    }
-    else if (m.type === 'new_message') { 
-      if (m.chat_id === NEWS_ID) {
-        newsMessages.push(m);
-        if(screen === 'news') render();
-      } else {
-        if (m.chat_id === currentChatId) {
-          currentChatMessages.push(m);
-          if(screen === 'messages') render();
-        }
-        if (m.from_email !== me.email && screen !== 'messages') {
-          showToast(`💬 Новое сообщение от ${m.from_name}`);
-        }
-      }
-    }
   };
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
@@ -235,8 +205,7 @@ function drawDashboard() {
   const tabs = [
     ['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],
     ['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],
-    ['history','История'],['users','Люди'],['messages','Чат'],
-    ['news','Новости']
+    ['history','История'],['users','Люди']
   ];
   if(me.role==='admin') {
     tabs.push(['admin','Админка']);
@@ -248,9 +217,7 @@ function drawDashboard() {
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
     if(id==='admin'){ send({type:'admin_allusers'}); }
     if(id==='info'){ send({type:'admin_get_info'}); }
-    if(id==='transfer' || id==='users' || id==='messages'){ send({type:'get_users'}); }
-    if(id==='messages'){ if(currentChatId) send({type:'get_chat', chat_id: currentChatId}); }
-    if(id==='news'){ send({type:'get_chat', chat_id: NEWS_ID}); }
+    if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
     render();
   })); });
   app.appendChild(nav);
@@ -263,8 +230,6 @@ function drawDashboard() {
   else if(screen==='ttfbl') drawTtfblBody(app);
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
-  else if(screen==='messages') drawMessagesBody(app);
-  else if(screen==='news') drawNewsBody(app);
   else if(screen==='admin') drawAdminBody(app);
   else if(screen==='info') drawInfoBody(app);
 }
@@ -401,104 +366,6 @@ function drawUsersBody(app) {
     row.appendChild(h('span','muted', u.email));
     c.appendChild(row);
   }
-  app.appendChild(c);
-}
-
-function drawMessagesBody(app) {
-  const c = h('div','card');
-  c.appendChild(h('h2',null,'Чат'));
-  
-  const selUser = document.createElement('select');
-  selUser.style.marginBottom = '10px';
-  const defOpt = document.createElement('option');
-  defOpt.value = ''; defOpt.textContent = 'Выбери, кому написать...';
-  selUser.appendChild(defOpt);
-  
-  for(const u of allUsers) {
-    if(u.email === me.email) continue;
-    const o = document.createElement('option');
-    o.value = u.email; 
-    o.textContent = (u.online ? '🟢 ' : '') + u.name;
-    if (currentChatId === u.email) o.selected = true;
-    selUser.appendChild(o);
-  }
-  selUser.onchange = () => {
-    currentChatId = selUser.value;
-    currentChatMessages = [];
-    if(currentChatId) send({type:'get_chat', chat_id: currentChatId});
-    render();
-  };
-  c.appendChild(selUser);
-
-  if (!currentChatId) {
-    c.appendChild(h('div', 'muted', 'Выбери человека из списка выше, чтобы начать переписку.'));
-    app.appendChild(c);
-    return;
-  }
-
-  const chatBox = h('div', 'chat-box');
-  for (const m of currentChatMessages) {
-    const isMine = m.from_email === me.email;
-    const msgDiv = h('div', 'msg' + (isMine ? ' my' : ''));
-    msgDiv.appendChild(h('div', null, m.text));
-    chatBox.appendChild(msgDiv);
-  }
-  c.appendChild(chatBox);
-
-  let msgText = '';
-  const inputField = document.createElement('input');
-  inputField.placeholder = 'Напиши сообщение...';
-  inputField.oninput = (e) => { msgText = e.target.value; };
-  inputField.onkeydown = (e) => {
-    if (e.key === 'Enter' && msgText.trim()) {
-      send({type:'send_msg', chat_id: currentChatId, to_email: currentChatId, text: msgText});
-      inputField.value = '';
-      msgText = '';
-    }
-  };
-  c.appendChild(inputField);
-  
-  c.appendChild(btn('Отправить', 'btn', () => {
-    if (msgText.trim()) {
-      send({type:'send_msg', chat_id: currentChatId, to_email: currentChatId, text: msgText});
-      inputField.value = '';
-      msgText = '';
-    }
-  }));
-  
-  app.appendChild(c);
-}
-
-function drawNewsBody(app) {
-  const c = h('div','card ttfbl');
-  c.appendChild(h('h2',null,'📢 Новости банка (только админ)'));
-  
-  const chatBox = h('div', 'chat-box');
-  for (const m of newsMessages) {
-    const msgDiv = h('div', 'msg msg-news');
-    msgDiv.appendChild(h('b', null, m.from_name + ': '));
-    msgDiv.appendChild(h('div', null, m.text));
-    chatBox.appendChild(msgDiv);
-  }
-  c.appendChild(chatBox);
-
-  if (me.email === ADMIN_EMAIL) {
-    let msgText = '';
-    const inputField = document.createElement('input');
-    inputField.placeholder = 'Напиши новость...';
-    inputField.oninput = (e) => { msgText = e.target.value; };
-    c.appendChild(inputField);
-    c.appendChild(btn('Опубликовать', 'btn2', () => {
-      if (msgText.trim()) {
-        send({type:'send_msg', chat_id: NEWS_ID, text: msgText});
-        inputField.value = '';
-        msgText = '';
-      }
-    }));
-  } else {
-    c.appendChild(h('div','muted','Только владелец банка может публиковать новости.'));
-  }
-  
   app.appendChild(c);
 }
 

@@ -38,7 +38,6 @@
   .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
-  .news-msg { background: rgba(198,255,0,.15); border: 1px solid rgba(198,255,0,.3); padding: 10px; border-radius: 10px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -53,7 +52,6 @@ const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
 const DEC = { RUB:2, USD:2, TRY:2, KZT:2, TTFBL:0 };
 const START = 3075;
 const ADMIN_EMAIL = 'mar.maks999@gmail.com';
-const NEWS_ID = 'news_channel';
 
 function toMinor(v,c){return Math.round(Number(v)*Math.pow(10,DEC[c]));}
 function fromMinor(m,c){return m/Math.pow(10,DEC[c]);}
@@ -75,7 +73,6 @@ let screen = 'dashboard';
 let lastHistory = [];
 let adminUsers = [];
 let allUsers = [];
-let newsMessages = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
@@ -126,8 +123,6 @@ function connect() {
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
-    else if (m.type === 'chat_history') { newsMessages = m.messages; render(); }
-    else if (m.type === 'new_message' && m.chat_id === NEWS_ID) { newsMessages.push(m); if(screen === 'info') render(); }
   };
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
@@ -199,14 +194,13 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Новости'],['profile','Профиль']];
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Инфа']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
     if(id==='admin'){ send({type:'admin_allusers'}); }
     if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
-    if(id==='info'){ send({type:'get_chat', chat_id: NEWS_ID}); }
     render();
   })); });
   app.appendChild(nav);
@@ -220,7 +214,6 @@ function drawDashboard() {
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
   else if(screen==='info') drawInfoBody(app);
-  else if(screen==='profile') drawProfileBody(app);
   else if(screen==='admin') drawAdminBody(app);
 }
 
@@ -361,45 +354,6 @@ function drawUsersBody(app) {
 
 function drawInfoBody(app) {
   const c = h('div','card');
-  c.appendChild(h('h2',null,'📢 Новости'));
-  
-  const box = h('div');
-  box.style.maxHeight = '300px';
-  box.style.overflowY = 'auto';
-  box.style.marginBottom = '15px';
-  
-  if (!newsMessages.length) {
-    box.appendChild(h('div','muted','Новостей пока нет.'));
-  } else {
-    newsMessages.forEach(m => {
-      const msg = h('div', 'news-msg');
-      msg.appendChild(h('b', null, m.from_name + ': '));
-      msg.appendChild(h('div', null, m.text));
-      box.appendChild(msg);
-    });
-  }
-  c.appendChild(box);
-
-  if (me.role === 'admin') {
-    let text = '';
-    const ta = document.createElement('textarea');
-    ta.placeholder = 'Напиши новость...';
-    ta.rows = 3;
-    ta.oninput = (e) => { text = e.target.value; };
-    c.appendChild(ta);
-    c.appendChild(btn('Опубликовать', 'btn2', () => {
-      if (text.trim()) {
-        send({type:'send_msg', chat_id: NEWS_ID, text: text});
-        ta.value = '';
-      }
-    }));
-  }
-  app.appendChild(c);
-}
-
-// НОВАЯ ВКЛАДКА: ПРОФИЛЬ (Инфа)
-function drawProfileBody(app) {
-  const c = h('div','card');
   c.appendChild(h('h2',null,'Информация об аккаунте'));
   
   c.appendChild(h('div','rowline', ''));
@@ -415,20 +369,14 @@ function drawProfileBody(app) {
   c.lastChild.appendChild(h('span', me.role==='admin'?'tag admin':'tag', me.role==='admin'?'ADMIN':'USER'));
 
   c.appendChild(h('div','rowline', ''));
+  c.lastChild.appendChild(h('span','muted','Пароль:'));
+  c.lastChild.appendChild(h('b',null, me.pwd || '******'));
+
+  c.appendChild(h('div','rowline', ''));
   c.lastChild.appendChild(h('span','muted','Секретное слово:'));
-  c.lastChild.appendChild(h('span',null, '••••••'));
+  c.lastChild.appendChild(h('b',null, me.secret || '******'));
 
   app.appendChild(c);
-
-  const c2 = h('div','card');
-  c2.appendChild(h('h3',null,'Сменить секретное слово'));
-  let newSec = '';
-  c2.appendChild(input('Новое секретное слово', '', v=>newSec=v, 'password'));
-  c2.appendChild(btn('Обновить', 'btn', () => {
-    if (newSec.length < 2) return showToast('Мин. 2 символа');
-    showToast('В этой демо-версии смена секретного слова недоступна');
-  }));
-  app.appendChild(c2);
 }
 
 function drawTtfblBody(app) {
@@ -466,7 +414,7 @@ function drawHistoryBody(app) {
 function drawAdminBody(app) {
   if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
   const c = h('div','card');
-  c.appendChild(h('h2',null,'Счета пользователей'));
+  c.appendChild(h('h2',null,'Счета и данные пользователей'));
   
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
 
@@ -478,6 +426,12 @@ function drawAdminBody(app) {
     if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
     head.appendChild(left);
     block.appendChild(head);
+
+    // Данные для входа (Пароль и Секретное слово)
+    const infoRow = h('div', 'muted');
+    infoRow.style.marginBottom = '8px';
+    infoRow.innerHTML = `Пароль: <b style="color:#fff">${u.pwd || '—'}</b> | Секрет: <b style="color:#fff">${u.secret || '—'}</b>`;
+    block.appendChild(infoRow);
 
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';

@@ -12,8 +12,8 @@
   .btn{background:#FF3D00;color:#fff;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn2{background:#C6FF00;color:#000;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
   .btn3{background:rgba(255,255,255,.1);color:#F5F5F7;border:0;padding:11px 18px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;margin-right:6px}
-  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
-  input:focus,select:focus{outline:none;border-color:#FF3D00}
+  input,select,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;font-size:15px;box-sizing:border-box;margin-bottom:8px;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#FF3D00}
   h1{margin:0 0 6px;font-size:24px}
   h2{margin:0 0 10px;font-size:17px}
   .muted{color:#8A8A93;font-size:13px}
@@ -38,6 +38,7 @@
   .converted{background:rgba(198,255,0,.08);border:1px solid rgba(198,255,0,.3);border-radius:10px;padding:10px;margin:8px 0;color:#C6FF00;font-weight:bold}
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
+  .news-msg { background: rgba(198,255,0,.15); border: 1px solid rgba(198,255,0,.3); padding: 10px; border-radius: 10px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -74,6 +75,7 @@ let screen = 'dashboard';
 let lastHistory = [];
 let adminUsers = [];
 let allUsers = [];
+let newsMessages = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
 let historyLoaded = false;
@@ -89,7 +91,6 @@ function connect() {
   ws = new WebSocket(proto + '://' + window.location.host + '/');
   
   ws.onopen = () => { 
-    console.log('WS connected');
     if (savedEmail && savedSecret) {
       send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true});
     } else {
@@ -125,6 +126,8 @@ function connect() {
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
+    else if (m.type === 'chat_history') { newsMessages = m.messages; render(); }
+    else if (m.type === 'new_message' && m.chat_id === NEWS_ID) { newsMessages.push(m); if(screen === 'info') render(); }
   };
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
@@ -196,13 +199,14 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди']];
+  const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['info','Инфа']];
   if(me.role==='admin') tabs.push(['admin','Админка']);
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
     if(id==='admin'){ send({type:'admin_allusers'}); }
     if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
+    if(id==='info'){ send({type:'get_chat', chat_id: NEWS_ID}); }
     render();
   })); });
   app.appendChild(nav);
@@ -215,6 +219,7 @@ function drawDashboard() {
   else if(screen==='ttfbl') drawTtfblBody(app);
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
+  else if(screen==='info') drawInfoBody(app);
   else if(screen==='admin') drawAdminBody(app);
 }
 
@@ -349,6 +354,44 @@ function drawUsersBody(app) {
     row.appendChild(left);
     row.appendChild(h('span','muted', u.email));
     c.appendChild(row);
+  }
+  app.appendChild(c);
+}
+
+function drawInfoBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'📢 Инфа (Новости)'));
+  
+  const box = h('div');
+  box.style.maxHeight = '300px';
+  box.style.overflowY = 'auto';
+  box.style.marginBottom = '15px';
+  
+  if (!newsMessages.length) {
+    box.appendChild(h('div','muted','Новостей пока нет.'));
+  } else {
+    newsMessages.forEach(m => {
+      const msg = h('div', 'news-msg');
+      msg.appendChild(h('b', null, m.from_name + ': '));
+      msg.appendChild(h('div', null, m.text));
+      box.appendChild(msg);
+    });
+  }
+  c.appendChild(box);
+
+  if (me.role === 'admin') {
+    let text = '';
+    const ta = document.createElement('textarea');
+    ta.placeholder = 'Напиши новость...';
+    ta.rows = 3;
+    ta.oninput = (e) => { text = e.target.value; };
+    c.appendChild(ta);
+    c.appendChild(btn('Опубликовать', 'btn2', () => {
+      if (text.trim()) {
+        send({type:'send_msg', chat_id: NEWS_ID, text: text});
+        ta.value = '';
+      }
+    }));
   }
   app.appendChild(c);
 }

@@ -16,47 +16,55 @@
 <body>
 <div class="card" id="screen">
   <h1>Проверка BOBOR-ID...</h1>
-  <p>Пожалуйста, подождите. Мы проверяем ваш паспорт. Это может занять до 1 минуты, если сервер проснулся.</p>
+  <p>Пожалуйста, подождите. Мы проверяем ваш паспорт.</p>
 </div>
 <script>
   var savedEmail = localStorage.getItem('bobor_email');
   
   if (!savedEmail) {
-    // Если не залогинен, пускаем в банк
     window.location.href = '/index.html';
   } else {
-    // Пытаемся достучаться до BOBOR-ID (с 3 попытками)
     function checkPassport(attempt) {
       fetch('https://bobor-passport.onrender.com/api/approval/' + savedEmail)
         .then(r => r.json())
         .then(data => {
           if (data.approved) {
-            window.location.href = '/index.html'; // Паспорт есть
+            // Паспорт есть — пускаем в банк
+            window.location.href = '/index.html';
           } else {
+            // Паспорта нет — ОТПРАВЛЯЕМ ЗАПРОС В BOBOR-ID
+            fetch('https://bobor-passport.onrender.com/api/save_profile', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ 
+                email: savedEmail, 
+                photo_base64: '', // Фото пока нет
+                age: 0, 
+                gender: '' 
+              })
+            }).catch(() => {}); // Отправляем и не ждем ответа
+
             document.getElementById('screen').innerHTML = `
               <h1 style="color:#ff5555">🚫 ДОСТУП ЗАКРЫТ</h1>
-              <p>Ваш BOBOR-ID не подтвержден.</p>
+              <p>Ваш BOBOR-ID не подтвержден. Заявка отправлена админу. Пожалуйста, подождите подтверждения в BOBOR-ID.</p>
               <button class="btn" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
               <button class="btn2" onclick="location.reload()">Я подтвердил, проверить</button>
             `;
           }
         })
         .catch(() => {
-          // Если ошибка связи (сервер спит), делаем еще попытку
           if (attempt < 3) {
-            setTimeout(() => checkPassport(attempt + 1), 5000); // Ждем 5 секунд и пробуем снова
+            setTimeout(() => checkPassport(attempt + 1), 5000);
           } else {
             document.getElementById('screen').innerHTML = `
               <h1 style="color:#FFB800">⚠️ BOBOR-ID не отвечает</h1>
-              <p>Сервер BOBOR-ID слишком долго просыпается. Пожалуйста, подождите минуту и нажмите кнопку ниже.</p>
+              <p>Сервер спит. Попробуйте снова через минуту.</p>
               <button class="btn" onclick="location.reload()">Попробовать снова</button>
-              <button class="btn2" onclick="window.location.href='/index.html'">Войти без проверки (опасно)</button>
             `;
           }
         });
     }
 
-    // Начинаем проверку
     checkPassport(1);
   }
 </script>

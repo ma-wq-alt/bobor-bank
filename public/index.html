@@ -83,30 +83,60 @@ let savedSecret = localStorage.getItem('bobor_secret');
 
 function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
-// === ПРОВЕРКА ПАСПОРТА ===
+// === УМНАЯ ПРОВЕРКА ПАСПОРТА ===
+// Проверяем не только сохраненный email, но и текущую сессию
 function checkPassport() {
-  if (!savedEmail) { 
-    connect(); 
-    return; 
-  }
-
   document.getElementById('app').innerHTML = `
     <div class="card" style="text-align:center;padding:50px;">
       <h1 style="color:#FFB800;">⏳ ПРОВЕРКА...</h1>
-      <p class="muted">Проверяем ваш BOBOR-ID...</p>
+      <p class="muted">Проверяем наличие BOBOR-ID...</p>
     </div>
   `;
 
-  fetch('https://bobor-passport.onrender.com/api/approval/' + savedEmail)
+  // Если у человека нет сохраненного email, мы все равно должны проверить, 
+  // есть ли у него вообще паспорт (вдруг он зарегался в паспорте, но не в банке)
+  let emailToCheck = savedEmail;
+
+  // Если email нет, мы не можем проверить конкретного человека, 
+  // поэтому просто показываем кнопку "Войти". 
+  // Но чтобы новичок не мог зарегаться без паспорта, мы просим его сначала получить ID.
+  if (!emailToCheck) {
+    // Пытаемся вытащить email из сохранений паспорта (вдруг он там залогинен)
+    let idUser = localStorage.getItem('id_email'); // В BOBOR-ID сохраняется как 'id_email'
+    if (idUser) {
+      emailToCheck = idUser;
+    }
+  }
+
+  if (!emailToCheck) {
+    // Если вообще нигде нет email - показываем блок
+    document.getElementById('app').innerHTML = `
+      <div class="card" style="text-align:center;padding:50px;">
+        <h1 style="color:#FF5555;">🚫 НУЖЕН BOBOR-ID</h1>
+        <p class="muted">Для входа в банк сначала получите BOBOR-ID.</p>
+        <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Получить BOBOR-ID</button>
+        <button class="btn" style="width:100%;margin-top:10px;" onclick="connect()">Я уже подтвержден</button>
+      </div>
+    `;
+    return;
+  }
+
+  // Если email найден - стучимся в BOBOR-ID
+  fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
     .then(r => r.json())
     .then(data => {
       if (data.approved) {
+        // Если подтвержден - запускаем банк
+        if (!savedEmail) {
+           // Если паспорт есть, но в банк он еще не заходил - пусть зайдет
+           // (Банк сам попросит логин/пароль)
+        }
         connect(); 
       } else {
         document.getElementById('app').innerHTML = `
           <div class="card" style="text-align:center;padding:50px;">
             <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
-            <p class="muted">Ваш BOBOR-ID не подтвержден. Подождите админа.</p>
+            <p class="muted">Ваш BOBOR-ID не подтвержден или не заполнен.</p>
             <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
             <button class="btn" style="width:100%;margin-top:10px;" onclick="location.reload()">Обновить</button>
           </div>
@@ -114,7 +144,7 @@ function checkPassport() {
       }
     })
     .catch(() => { 
-      // Если BOBOR-ID спит и не отвечает, пускаем в банк
+      // Если BOBOR-ID не отвечает (спит), пускаем в банк
       connect(); 
     });
 }
@@ -163,7 +193,7 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// --- Отрисовка интерфейса (твой старый код) ---
+// --- Отрисовка ---
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
@@ -552,7 +582,7 @@ window.onerror = function(msg, url, line){
   e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
 };
 
-// ЗАПУСКАЕМ ПРОВЕРКУ ВМЕСТО ПРОСТОГО CONNECT
+// ЗАПУСКАЕМ ПРОВЕРКУ
 checkPassport();
 </script>
 </body>

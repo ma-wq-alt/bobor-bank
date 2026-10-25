@@ -124,12 +124,34 @@ function checkPassport() {
             <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
             <p class="muted">Ваш BOBOR-ID не подтвержден.</p>
             <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
-            <button class="btn" style="width:100%;margin-top:10px;" onclick="location.reload()">Обновить</button>
+            <button class="btn" style="width:100%;margin-top:10px;" onclick="forceCheck()">Я подтвержден (проверить)</button>
           </div>
         `;
       }
     })
     .catch(() => { connect(); });
+}
+
+// Принудительная проверка (для кнопки "Обновить")
+function forceCheck() {
+  localStorage.removeItem('bobor_approved'); // Сбрасываем кэш, чтобы проверило заново
+  const emailToCheck = savedEmail || localStorage.getItem('id_email');
+  if(!emailToCheck) return location.reload();
+  
+  document.getElementById('app').innerHTML = `<div class="card" style="text-align:center;padding:50px;"><h1 style="color:#FFB800;">⏳ ПРОВЕРКА...</h1></div>`;
+  
+  fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
+    .then(r => r.json())
+    .then(data => {
+      if (data.approved) {
+        localStorage.setItem('bobor_approved', 'true');
+        connect(); 
+      } else {
+        alert('Ваш паспорт все еще не подтвержден админом.');
+        location.reload();
+      }
+    })
+    .catch(() => { alert('BOBOR-ID не отвечает.'); location.reload(); });
 }
 
 function connect() {
@@ -183,7 +205,7 @@ function drawLogin() {
   app.appendChild(c);
 }
 
-// ... (Функции drawRegister, drawDashboard, drawDashBody и остальные остаются без изменений)
+// ... (Остальные функции отрисовки остаются без изменений)
 
 // ЗАПУСКАЕМ ПРОВЕРКУ
 checkPassport();

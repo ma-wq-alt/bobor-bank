@@ -7,7 +7,7 @@
 <style>
   body{background:#0B0B0F;color:#fff;font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;text-align:center;padding:20px;box-sizing:border-box}
   .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:40px 20px;max-width:400px;width:100%}
-  h1{color:#C6FF00;font-size:24px;margin-top:0}
+  h1{font-size:24px;margin-top:0}
   p{color:#8A8A93;font-size:15px;margin-bottom:25px}
   .btn{background:#C6FF00;color:#000;border:0;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;width:100%;margin-bottom:10px}
   .btn2{background:rgba(255,255,255,0.1);color:#fff;border:0;padding:12px 20px;border-radius:10px;font-size:15px;font-weight:bold;cursor:pointer;width:100%}
@@ -15,56 +15,46 @@
 </head>
 <body>
 <div class="card" id="screen">
-  <h1>Проверка BOBOR-ID...</h1>
-  <p>Мы будим сервер BOBOR-ID. Пожалуйста, подождите, это может занять до 1 минуты.</p>
+  <h1 style="color:#C6FF00">⏳ Проверка...</h1>
+  <p>Мы смотрим ваш BOBOR-ID.</p>
 </div>
 <script>
   var savedEmail = localStorage.getItem('bobor_email');
   
   if (!savedEmail) {
-    window.location.href = '/index.html';
+    window.location.href = '/index.html'; // Если не залогинен — пускаем (банк сам попросит пароль)
   } else {
-    // Пытаемся достучаться до BOBOR-ID 12 раз по 5 секунд (итого 1 минута)
-    function checkPassport(attempt) {
-      document.getElementById('screen').innerHTML = `
-        <h1>Проверка BOBOR-ID...</h1>
-        <p>Попытка ${attempt} из 12. Пожалуйста, подождите, сервер просыпается...</p>
-      `;
-
+    function checkStatus(attempt) {
       fetch('https://bobor-passport.onrender.com/api/approval/' + savedEmail)
-        .then(r => {
-          if (!r.ok) throw new Error('Server error');
-          return r.json();
-        })
+        .then(r => r.json())
         .then(data => {
           if (data.approved) {
-            window.location.href = '/index.html'; // Паспорт есть
+            // Если ПОДТВЕРЖДЕН — пускаем в банк
+            window.location.href = '/index.html';
           } else {
-            // Паспорта нет — показываем блок
+            // Если НЕ подтвержден (нет паспорта или "Ожидание") — показываем экран
             document.getElementById('screen').innerHTML = `
-              <h1 style="color:#ff5555">🚫 ДОСТУП ЗАКРЫТ</h1>
-              <p>Ваш BOBOR-ID не подтвержден.</p>
+              <h1 style="color:#FFB800">⏳ ОЖИДАНИЕ</h1>
+              <p>Ваш BOBOR-ID еще не подтвержден администратором. Пожалуйста, подождите.</p>
+              <p style="font-size:12px; margin-top:-10px;">Если вы еще не заполнили анкету или она на проверке, перейдите в BOBOR-ID.</p>
               <button class="btn" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
-              <button class="btn2" onclick="location.reload()">Я подтвердил, проверить</button>
+              <button class="btn2" onclick="location.reload()">Проверить снова</button>
             `;
           }
         })
         .catch(() => {
-          // Если ошибка (сервер спит), пробуем снова
-          if (attempt < 12) {
-            setTimeout(() => checkPassport(attempt + 1), 5000);
+          if (attempt < 10) {
+            setTimeout(() => checkStatus(attempt + 1), 3000); // Ждем 3 секунды и пробуем снова, если сервер спит
           } else {
             document.getElementById('screen').innerHTML = `
-              <h1 style="color:#FFB800">⚠️ BOBOR-ID не отвечает</h1>
-              <p>Сервер не проснулся за 1 минуту. Проверьте, работает ли он (откройте ссылку BOBOR-ID в новой вкладке).</p>
-              <button class="btn" onclick="location.reload()">Попробовать снова</button>
+              <h1 style="color:#ff5555">⚠️ Ошибка</h1>
+              <p>Сервер BOBOR-ID не отвечает. Подождите минуту.</p>
+              <button class="btn2" onclick="location.reload()">Обновить</button>
             `;
           }
         });
     }
-
-    // Начинаем с 1-й попытки
-    checkPassport(1);
+    checkStatus(1);
   }
 </script>
 </body>

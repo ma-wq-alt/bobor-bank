@@ -83,20 +83,11 @@ let savedSecret = localStorage.getItem('bobor_secret');
 
 function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
-// === ПРОВЕРКА ПАСПОРТА ===
 function checkPassport() {
   if (window.bobor_authenticated) return connect();
-
-  document.getElementById('app').innerHTML = `
-    <div class="card" style="text-align:center;padding:50px;">
-      <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
-      <p class="muted">Проверяем ваш BOBOR-ID...</p>
-    </div>
-  `;
-
+  document.getElementById('app').innerHTML = `<div class="card" style="text-align:center;padding:50px;"><h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1><p class="muted">Проверяем ваш BOBOR-ID...</p></div>`;
   let emailToCheck = savedEmail || localStorage.getItem('id_email');
   if (!emailToCheck) { connect(); return; }
-
   fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
     .then(r => r.json())
     .then(data => {
@@ -108,11 +99,9 @@ function checkPassport() {
             <p class="muted">Ваш BOBOR-ID не подтвержден.</p>
             <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
             <button class="btn" style="width:100%;margin-top:10px;" onclick="location.reload()">Проверить снова</button>
-          </div>
-        `;
+          </div>`;
       }
-    })
-    .catch(() => { connect(); });
+    }).catch(() => { connect(); });
 }
 
 function connect() {
@@ -136,7 +125,7 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// --- ВСЕ ФУНКЦИИ ОТРИСОВКИ ---
+// --- ОТРИСОВКА ---
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
@@ -349,16 +338,55 @@ function drawHistoryBody(app) {
   app.appendChild(c);
 }
 
+// === НОВАЯ (СТАРАЯ) АДМИНКА ===
 function drawAdminBody(app) {
-  if(me.role!=='admin') return;
+  if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
   const c = h('div','card');
-  c.appendChild(h('h2',null,'Админка'));
-  adminUsers.forEach(u => {
-    const row = h('div','rowline');
-    row.appendChild(h('span',null, u.name + ' (' + u.email + ')'));
-    row.appendChild(btn('+1000', 'btn2', () => { send({type:'admin_mint', targetEmail:u.email, cur:'TTFBL', amt:'1000'}); }));
-    c.appendChild(row);
-  });
+  c.appendChild(h('h2',null,'Админка (Счета и Баны)'));
+  
+  const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
+
+  for(const u of sorted){
+    const block = h('div','user-block');
+    const head = h('div','rowline');
+    const left = h('span',null,'');
+    left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
+    if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
+    head.appendChild(left);
+    block.appendChild(head);
+
+    const banRow = h('div', 'row');
+    banRow.style.marginBottom = '8px';
+    if (u.banned_until && new Date(u.banned_until) > new Date()) {
+      banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU') + '  '));
+      banRow.appendChild(btn('Разбанить', 'btn2', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+    } else {
+      banRow.appendChild(h('span', 'muted', 'Бан: '));
+      banRow.appendChild(btn('1ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('24ч', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(btn('Навсегда', 'btn3', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+    }
+    block.appendChild(banRow);
+
+    for(const cur of CUR){
+      const acc = u.accounts[cur];
+      const row = h('div','acc-row');
+      row.appendChild(h('div',null,(cur==='TTFBL'?'◈ ':'')+cur+' · ' + fmt(acc.bal,cur) + ' (Вклад: '+fmt(acc.vault_bal || 0, cur)+')'));
+      
+      const actions = h('div'); actions.style.marginTop='4px';
+      const amtIn = document.createElement('input');
+      amtIn.placeholder = 'Сумма';
+      amtIn.style.cssText='width:100px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
+      actions.appendChild(amtIn);
+      
+      actions.appendChild(btn('+','btn2',()=>{ if(amtIn.value>0) { send({type:'admin_mint', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      actions.appendChild(btn('−','btn3',()=>{ if(amtIn.value>0) { send({type:'admin_burn', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      
+      row.appendChild(actions);
+      block.appendChild(row);
+    }
+    c.appendChild(block);
+  }
   app.appendChild(c);
 }
 
@@ -381,7 +409,6 @@ window.onerror = function(msg, url, line){
   e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
 };
 
-// ЗАПУСКАЕМ
 checkPassport();
 </script>
 </body>

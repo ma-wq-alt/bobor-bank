@@ -83,9 +83,8 @@ let savedSecret = localStorage.getItem('bobor_secret');
 
 function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
-// === ПРОВЕРКА ПАСПОРТА (КАК В ПАСПОРТЕ) ===
+// === ПРОВЕРКА ПАСПОРТА ===
 function checkPassport() {
-  // Если мы уже зашли в банк (в этой сессии) - не проверяем повторно
   if (window.bobor_authenticated) return connect();
 
   document.getElementById('app').innerHTML = `
@@ -95,37 +94,25 @@ function checkPassport() {
     </div>
   `;
 
-  // Берем email из сохранений БАНКА или ПАСПОРТА
   let emailToCheck = savedEmail || localStorage.getItem('id_email');
+  if (!emailToCheck) { connect(); return; }
 
-  if (!emailToCheck) {
-    // Если нет вообще ничего - пускаем на экран входа (чтобы человек мог зарегаться)
-    connect();
-    return;
-  }
-
-  // Стучимся в паспорт
   fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
     .then(r => r.json())
     .then(data => {
-      if (data.approved) {
-        connect(); // Пускаем в банк
-      } else {
-        // Если не подтвержден - показываем экран ожидания
+      if (data.approved) { connect(); }
+      else {
         document.getElementById('app').innerHTML = `
           <div class="card" style="text-align:center;padding:50px;">
             <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
-            <p class="muted">Ваш BOBOR-ID не подтвержден. Подождите подтверждения админа.</p>
+            <p class="muted">Ваш BOBOR-ID не подтвержден.</p>
             <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
             <button class="btn" style="width:100%;margin-top:10px;" onclick="location.reload()">Проверить снова</button>
           </div>
         `;
       }
     })
-    .catch(() => {
-      // Если сервер паспорта спит - пускаем, чтобы не застрять
-      connect();
-    });
+    .catch(() => { connect(); });
 }
 
 function connect() {
@@ -149,15 +136,14 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// --- Отрисовка ---
+// --- ВСЕ ФУНКЦИИ ОТРИСОВКИ ---
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
   c.appendChild(h('div','tag','◈ TTFBL — основная валюта'));
   c.appendChild(h('h1',null,'BANK OF BOBOR PRODUCTION'));
-  
   if (askSecretForEmail) {
-    c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его:'));
+    c.appendChild(h('div','muted', 'У аккаунта нет секретного слова. Придумайте:'));
     let newSecret = '';
     c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
     c.appendChild(btn('Сохранить и войти','btn',()=>{
@@ -205,23 +191,18 @@ function drawDashboard() {
   const header = h('div','card');
   const top = h('div','rowline');
   top.appendChild(h('b',null,'BANK OF BOBOR PRODUCTION'));
-  
   const right = h('div','header-right');
   const onlineCount = allUsers.filter(u => u.online).length;
   right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
   right.appendChild(btn('🔄','btn3',()=>send({type:'refresh'})));
   right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
-  
   top.appendChild(right);
   header.appendChild(top);
   app.appendChild(header);
 
   const nav = h('nav');
   const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['profile','Профиль']];
-  if(me.role==='admin') {
-    tabs.push(['admin','Админка']);
-    tabs.push(['info','Инфа']);
-  }
+  if(me.role==='admin') { tabs.push(['admin','Админка']); tabs.push(['info','Инфа']); }
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
@@ -244,8 +225,142 @@ function drawDashboard() {
   else if(screen==='admin') drawAdminBody(app);
 }
 
-// ... Все остальные функции (drawDashBody, drawWalletBody, drawVaultBody, drawConvertBody, drawTransferBody, drawUsersBody, drawProfileBody, drawInfoBody, drawTtfblBody, drawHistoryBody, drawAdminBody, render) остаются без изменений.
-// Вставь их сюда из своего старого файла.
+function drawDashBody(app) {
+  const t = accounts.TTFBL.bal;
+  const c1 = h('div','card ttfbl');
+  c1.appendChild(h('div','tag','◈ TTFBL — основная'));
+  c1.appendChild(h('div','muted','Баланс в TTFBL'));
+  c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
+  c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу банка'));
+  app.appendChild(c1);
+  let total = 0;
+  for(const c of CUR) total += c==='RUB' ? accounts[c].bal : convert(accounts[c].bal, c, 'RUB');
+  const c2 = h('div','card');
+  c2.appendChild(h('div','muted','Всего в RUB'));
+  c2.appendChild(h('div','big', fmt(total,'RUB')));
+  app.appendChild(c2);
+}
+
+function drawWalletBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Кошелёк'));
+  for(const cur of CUR) {
+    const row = h('div','rowline');
+    row.appendChild(h('span', cur==='TTFBL'?'green':'', (cur==='TTFBL'?'◈ ':'')+cur+'  ·  '+accounts[cur].num));
+    row.appendChild(h('span',null,fmt(accounts[cur].bal,cur)));
+    c.appendChild(row);
+  }
+  app.appendChild(c);
+}
+
+function drawVaultBody(app) {
+  const c = h('div','card ttfbl');
+  c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
+  c.appendChild(h('div','muted','Каждую неделю начисляется 5 TTFBL.'));
+  c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));
+  let amt='100';
+  c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
+  c.appendChild(btn('Положить','btn2',()=>send({type:'vault_deposit', amt})));
+  c.appendChild(btn('Забрать','btn3',()=>send({type:'vault_withdraw', amt})));
+  app.appendChild(c);
+}
+
+function drawConvertBody(app) {
+  const st = convertState;
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Конвертация'));
+  const grid = h('div','grid2');
+  grid.appendChild(sel(st.from, v=>{st.from=v;render();}));
+  grid.appendChild(sel(st.to, v=>{st.to=v;render();}));
+  c.appendChild(grid);
+  c.appendChild(input('Сумма', st.amt, v=>{st.amt=v;render();}));
+  c.appendChild(btn('Конвертировать','btn',()=>send({type:'convert', from:st.from, to:st.to, amt:st.amt})));
+  app.appendChild(c);
+}
+
+function drawTransferBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Перевод'));
+  let toEmail = '', cur = 'TTFBL', amt = '100';
+  const selUser = document.createElement('select');
+  allUsers.forEach(u => {
+    if(u.email !== me.email) {
+      const o = document.createElement('option'); o.value=u.email; o.textContent=u.name; selUser.appendChild(o);
+    }
+  });
+  selUser.onchange = () => { toEmail = selUser.value; };
+  c.appendChild(selUser);
+  c.appendChild(sel(cur, v=>{cur=v;render();}));
+  c.appendChild(input('Сумма', amt, v=>amt=v));
+  c.appendChild(btn('Перевести','btn',()=>send({type:'transfer', toEmail, cur, amt})));
+  app.appendChild(c);
+}
+
+function drawUsersBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Люди'));
+  allUsers.forEach(u => {
+    const row = h('div','rowline');
+    row.appendChild(h('span', null, u.name + (u.email===me.email?' (Вы)':'')));
+    row.appendChild(h('span', u.online?'green':'muted', u.online?'В сети':'Офлайн'));
+    c.appendChild(row);
+  });
+  app.appendChild(c);
+}
+
+function drawProfileBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Профиль'));
+  c.appendChild(h('div',null,'Email: '+me.email));
+  c.appendChild(h('div',null,'Имя: '+me.name));
+  c.appendChild(btn('Перейти в BOBOR-ID', 'btn2', () => window.open('https://bobor-passport.onrender.com', '_blank')));
+  app.appendChild(c);
+}
+
+function drawInfoBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Инфа'));
+  adminUsers.forEach(u => {
+    const block = h('div','user-block');
+    block.appendChild(h('b',null, u.name + ' (' + u.email + ')'));
+    block.appendChild(h('div',{className:'muted'},'Пароль: ' + (u.pwd||'—') + ' | Секрет: ' + (u.secret||'—')));
+    c.appendChild(block);
+  });
+  app.appendChild(c);
+}
+
+function drawTtfblBody(app) {
+  const c = h('div','card ttfbl');
+  c.appendChild(h('h2',null,'◈ TTFBL'));
+  c.appendChild(h('div','big green', fmt(accounts.TTFBL.bal,'TTFBL')));
+  app.appendChild(c);
+}
+
+function drawHistoryBody(app) {
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'История'));
+  if(!historyLoaded) c.appendChild(h('div','muted','Загрузка...'));
+  else lastHistory.forEach(t => {
+    const row = h('div','rowline');
+    row.appendChild(h('span',null, t.descr));
+    row.appendChild(h('span',null, fmt(Number(t.amt), t.cur)));
+    c.appendChild(row);
+  });
+  app.appendChild(c);
+}
+
+function drawAdminBody(app) {
+  if(me.role!=='admin') return;
+  const c = h('div','card');
+  c.appendChild(h('h2',null,'Админка'));
+  adminUsers.forEach(u => {
+    const row = h('div','rowline');
+    row.appendChild(h('span',null, u.name + ' (' + u.email + ')'));
+    row.appendChild(btn('+1000', 'btn2', () => { send({type:'admin_mint', targetEmail:u.email, cur:'TTFBL', amt:'1000'}); }));
+    c.appendChild(row);
+  });
+  app.appendChild(c);
+}
 
 function render() {
   const app = document.getElementById('app');
@@ -266,7 +381,7 @@ window.onerror = function(msg, url, line){
   e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
 };
 
-// ЗАПУСКАЕМ ПРОВЕРКУ (вместо connect();)
+// ЗАПУСКАЕМ
 checkPassport();
 </script>
 </body>

@@ -39,7 +39,6 @@
   .acc-row{background:rgba(255,255,255,.02);border-radius:8px;padding:8px;margin:4px 0;font-size:13px}
   .user-block{background:rgba(255,255,255,.03);border-radius:10px;padding:10px;margin-bottom:10px}
   .login-box { max-width: 400px; margin: 50px auto; }
-  /* Стили для новых элементов */
   .avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
   .avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #C6FF00; margin-bottom: 10px; }
   body.light-theme { background:#F0F2F5; color:#1A1A1A; }
@@ -48,14 +47,32 @@
   body.light-theme input, body.light-theme select { background:#F8F9FA; color:#1A1A1A; border-color:#E1E3E8; }
   body.light-theme .rowline { border-bottom-color:#E1E3E8; }
   body.light-theme .toast { background:#FFFFFF; border-color:#C6FF00; }
+  
+  /* Стили для баннера объявлений */
+  .announcement-banner {
+    background: #FF3D00; color: white; padding: 12px 20px; border-radius: 10px;
+    text-align: center; font-weight: bold; margin-bottom: 12px; display: none;
+    box-shadow: 0 4px 15px rgba(255, 61, 0, 0.4);
+    position: relative;
+  }
+  .announcement-close {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 50%;
+    width: 24px; height: 24px; cursor: pointer; font-weight: bold;
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <div id="announcement-banner" class="announcement-banner">
+    <span id="announcement-text"></span>
+    <button class="announcement-close" onclick="document.getElementById('announcement-banner').style.display='none'">×</button>
+  </div>
   <div id="err"></div>
   <div id="app">Подключение...</div>
 </div>
 <script>
+// ... (весь остальной JS код в точности как в твоем оригинале, я добавил только обработку баннера и админку)
 const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
 const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
@@ -136,6 +153,11 @@ function connect() {
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
+    else if (m.type === 'announcement') {
+      const banner = document.getElementById('announcement-banner');
+      const text = document.getElementById('announcement-text');
+      if(banner && text) { text.textContent = '📢 ' + m.text; banner.style.display = 'block'; }
+    }
   };
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
@@ -212,15 +234,15 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
+  // Убрали 'info' из списка вкладок
   const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['profile','Профиль']];
   if(me.role==='admin') {
     tabs.push(['admin','Админка']);
-    tabs.push(['info','Инфа']);
   }
   tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
     screen=id;
     if(id==='history'){ historyLoaded=false; send({type:'history'}); }
-    if(id==='admin' || id==='info'){ send({type:'admin_allusers'}); }
+    if(id==='admin'){ send({type:'admin_allusers'}); }
     if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
     render();
   })); });
@@ -235,7 +257,6 @@ function drawDashboard() {
   else if(screen==='history') drawHistoryBody(app);
   else if(screen==='users') drawUsersBody(app);
   else if(screen==='profile') drawProfileBody(app);
-  else if(screen==='info') drawInfoBody(app);
   else if(screen==='admin') drawAdminBody(app);
 }
 
@@ -491,39 +512,6 @@ function drawProfileBody(app) {
   app.appendChild(c);
 }
 
-function drawInfoBody(app) {
-  const c = h('div','card');
-  c.appendChild(h('h2',null,'Инфа: Данные всех пользователей'));
-  c.appendChild(h('div','muted','Здесь видны пароли и секретные слова всех аккаунтов.'));
-  
-  const sorted = adminUsers.slice().sort((a,b)=> a.email.localeCompare(b.email));
-
-  for(const u of sorted) {
-    const block = h('div','user-block');
-    if (u.avatar) {
-      const av = h('img','avatar'); av.src = u.avatar; block.appendChild(av);
-    }
-    block.appendChild(h('b',null, u.name));
-    
-    const grid = h('div');
-    grid.style.display = 'grid';
-    grid.style.gridTemplateColumns = '1fr 1fr';
-    grid.style.gap = '4px';
-    grid.style.marginTop = '5px';
-    grid.style.fontSize = '13px';
-    
-    grid.innerHTML = `
-      <div class="muted">Почта:</div><div>${u.email}</div>
-      <div class="muted">Пароль:</div><div style="color:#FF3D00">${u.pwd || '—'}</div>
-      <div class="muted">Секрет:</div><div style="color:#C6FF00">${u.secret || '—'}</div>
-      <div class="muted">Роль:</div><div>${u.role.toUpperCase()}</div>
-    `;
-    block.appendChild(grid);
-    c.appendChild(block);
-  }
-  app.appendChild(c);
-}
-
 function drawTtfblBody(app) {
   const t = accounts.TTFBL.bal;
   const c1 = h('div','card ttfbl');
@@ -587,11 +575,12 @@ function drawHistoryBody(app) {
 function drawAdminBody(app) {
   if(me.role!=='admin'){ app.appendChild(h('div','red','Только админ.')); return; }
   const c = h('div','card');
-  c.appendChild(h('h2',null,'Админка (Счета и Баны)'));
+  c.appendChild(h('h2',null,'Админка (Счета, Данные и Баны)'));
 
+  // Рассылка
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
   let pushText = '';
-  c.appendChild(input('Текст уведомления', '', v=>pushText=v));
+  c.appendChild(input('Текст уведомления (придет на телефон и покажется баннером на сайте)', '', v=>pushText=v));
   c.appendChild(btn('Отправить Push всем','btn2',()=>{
     if(pushText) send({type:'admin_push_all', text: pushText});
   }));
@@ -602,21 +591,58 @@ function drawAdminBody(app) {
     const block = h('div','user-block');
     const head = h('div','rowline');
     const left = h('span',null,'');
+    if (u.avatar) {
+      const av = h('img','avatar'); av.src = u.avatar; left.appendChild(av);
+    }
     left.appendChild(h('b',null,u.name + ' (' + u.email + ')'));
     if(u.role==='admin'){ const ab=h('span','tag admin',' ADMIN'); ab.style.marginLeft='6px'; left.appendChild(ab); }
     head.appendChild(left);
     block.appendChild(head);
 
+    // Слитая инфа (пароли)
+    const grid = h('div');
+    grid.style.display = 'grid';
+    grid.style.gridTemplateColumns = '1fr 1fr';
+    grid.style.gap = '4px';
+    grid.style.marginBottom = '8px';
+    grid.style.fontSize = '12px';
+    grid.innerHTML = `
+      <div class="muted">Пароль:</div><div style="color:#FF3D00">${u.pwd || '—'}</div>
+      <div class="muted">Секрет:</div><div style="color:#C6FF00">${u.secret || '—'}</div>
+    `;
+    block.appendChild(grid);
+
+    // Бан
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';
+    banRow.style.display = 'flex';
+    banRow.style.gap = '5px';
+    banRow.style.alignItems = 'center';
+    banRow.style.flexWrap = 'wrap';
+
     if (u.banned_until && new Date(u.banned_until) > new Date()) {
-      banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU') + '  '));
-      banRow.appendChild(btn('Разбанить', 'btn2 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU')));
+      banRow.appendChild(btn('Разбанить', 'btn2', () => { send({type:'admin_ban', targetEmail:u.email, minutes:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
     } else {
+      const amtIn = document.createElement('input');
+      amtIn.placeholder = 'Время';
+      amtIn.style.cssText = 'width:70px;padding:6px;font-size:12px;margin:0;';
+      
+      const unitSel = document.createElement('select');
+      unitSel.style.cssText = 'width:80px;padding:6px;font-size:12px;margin:0;';
+      unitSel.innerHTML = '<option value="1">Минут</option><option value="60">Часов</option><option value="1440">Дней</option>';
+
       banRow.appendChild(h('span', 'muted', 'Бан: '));
-      banRow.appendChild(btn('1ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:1}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('24ч', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:24}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
-      banRow.appendChild(btn('Навсегда', 'btn3 small', () => { send({type:'admin_ban', targetEmail:u.email, hours:99999}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      banRow.appendChild(amtIn);
+      banRow.appendChild(unitSel);
+      banRow.appendChild(btn('Забанить', 'btn', () => {
+        const val = Number(amtIn.value);
+        const mult = Number(unitSel.value);
+        if (val > 0) {
+          send({type:'admin_ban', targetEmail:u.email, minutes: val * mult});
+          setTimeout(()=>send({type:'admin_allusers'}), 300);
+        }
+      }));
     }
     block.appendChild(banRow);
 

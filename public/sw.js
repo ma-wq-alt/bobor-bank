@@ -1,4 +1,3 @@
-// public/sw.js
 self.addEventListener('push', function(event) {
   if (!event.data) return;
 
@@ -11,12 +10,9 @@ self.addEventListener('push', function(event) {
 
   const options = {
     body: data.body || 'Новое уведомление',
-    icon: '/icon-192.png', // если у тебя нет иконки, можешь закомментировать эту строку
-    badge: '/badge-72.png', // или эту
-    data: {
-      url: data.url || '/'
-    },
+    data: { url: data.url || '/' },
     vibrate: [100, 50, 100]
+    // ВАЖНО: Убрали requireInteraction, так как iOS его не поддерживает
   };
 
   event.waitUntil(

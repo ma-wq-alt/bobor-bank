@@ -4,7 +4,7 @@ import { createClient } from '@libsql/client';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import webpush from 'web-push'; // ИСПРАВЛЕНО ЗДЕСЬ (import вместо require)
+import webpush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,7 +13,6 @@ const TURSO_TOKEN = process.env.TURSO_TOKEN;
 if (!TURSO_URL || !TURSO_TOKEN) { console.error('Нет TURSO_URL или TURSO_TOKEN'); process.exit(1); }
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
 
-// Настройка VAPID для пушей
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT || 'mailto:mar.maks999@gmail.com',
   process.env.VAPID_PUBLIC_KEY,
@@ -41,7 +40,7 @@ function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 89999
 
 async function initSchema() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
+    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT, last_vault_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
@@ -51,6 +50,7 @@ async function initSchema() {
   try { await db.execute('ALTER TABLE users ADD COLUMN display_name TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN secret_word TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN last_vault_date TEXT'); } catch(e) {} // ДОБАВЛЕНО ДЛЯ ВКЛАДА
   try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
 
   try {
@@ -74,9 +74,10 @@ async function initSchema() {
 }
 
 async function createUser(email, pwd, name, role, display_name, secret_word) {
+  const now = new Date().toISOString();
   await db.execute({
-    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [email, pwd, name, role, display_name, secret_word, new Date().toISOString()],
+    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date, last_vault_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    args: [email, pwd, name, role, display_name, secret_word, now, now],
   });
   for (const c of CUR) {
     const start = (c === 'TTFBL') ? toMinor(START_TTFBL, 'TTFBL') : 0;
@@ -97,7 +98,6 @@ async function getUser(email) {
   return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word };
 }
 
-// === УВЕДОМЛЕНИЯ ===
 const clients = new Set();
 
 function notifyUser(email, text) {
@@ -108,7 +108,6 @@ function notifyUser(email, text) {
   }
 }
 
-// Функция отправки Push-уведомлений
 async function sendPushToUser(email, title, body) {
   try {
     const result = await db.execute({
@@ -144,31 +143,50 @@ async function sendPushToUser(email, title, body) {
   }
 }
 
-// === БОНУСЫ (РАЗ В 21 ДЕНЬ) ===
-async function checkBonuses() {
-  const users = await db.execute('SELECT email, last_bonus_date FROM users');
+// === БОНУСЫ И ВКЛАДЫ ===
+async function checkBonusesAndVaults() {
+  const users = await db.execute('SELECT email, last_bonus_date, last_vault_date FROM users');
   const now = new Date();
+  
   for (const user of users.rows) {
-    const lastDate = new Date(user.last_bonus_date || 0);
-    const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
-    if (diffDays >= 21) {
+    // 1. Бонус раз в 21 день
+    const lastBonusDate = new Date(user.last_bonus_date || 0);
+    const diffBonusDays = (now - lastBonusDate) / (1000 * 60 * 60 * 24);
+    if (diffBonusDays >= 21) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
       await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', 100, 'Бонус: 100 TTFBL (раз в 3 недели)', now.toLocaleString('ru-RU')] });
       notifyUser(user.email, '🎁 Вам начислен бонус: 100 TTFBL (раз в 3 недели)!');
       sendPushToUser(user.email, '🎁 Бонус!', 'Вам начислен бонус: 100 TTFBL!');
     }
+
+    // 2. Проценты на вклад (5 TTFBL раз в 7 дней)
+    const lastVaultDate = new Date(user.last_vault_date || 0);
+    const diffVaultDays = (now - lastVaultDate) / (1000 * 60 * 60 * 24);
+    if (diffVaultDays >= 7) {
+      const vaultAcc = await db.execute({ sql: 'SELECT vault_bal FROM accounts WHERE email = ? AND currency = ?', args: [user.email, 'TTFBL'] });
+      const vaultBal = Number(vaultAcc.rows[0]?.vault_bal || 0);
+      
+      if (vaultBal > 0) { // Если на вкладе есть деньги
+        const interest = 5; // Начисляем 5 TTFBL
+        await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [interest, user.email, 'TTFBL'] });
+        await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', interest, 'Начисление процентов на вклад', now.toLocaleString('ru-RU')] });
+        notifyUser(user.email, `💸 Начислены проценты на вклад: ${interest} TTFBL!`);
+        sendPushToUser(user.email, '💸 Проценты на вклад', `Вам начислено ${interest} TTFBL за вклад!`);
+      }
+      // Обновляем дату в любом случае, чтобы не спамило каждую минуту
+      await db.execute({ sql: 'UPDATE users SET last_vault_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
+    }
   }
 }
-setInterval(checkBonuses, 1000 * 60 * 60); 
+setInterval(checkBonusesAndVaults, 1000 * 60 * 60); 
 
 const app = express();
-app.use(express.json()); // Нужно для API пушей
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// API для сохранения подписки
 app.post('/api/push/subscribe', async (req, res) => {
   const { email, subscription } = req.body;
   if (!email || !subscription?.endpoint || !subscription?.keys) {
@@ -383,6 +401,11 @@ async function handle(ws, msg) {
       const d = new Date();
       d.setHours(d.getHours() + hours);
       banned_until = d.toISOString();
+      // ДОБАВЛЕНО: Пуш о бане
+      sendPushToUser(targetEmail, '🚫 Вы забанены!', `Админ ограничил ваш доступ на ${hours} часов.`);
+    } else {
+      // ДОБАВЛЕНО: Пуш о разбане
+      sendPushToUser(targetEmail, '✅ Вы разбанены!', 'Админ снял с вас ограничения.');
     }
     await db.execute({ sql: 'UPDATE users SET banned_until = ? WHERE email = ?', args: [banned_until, targetEmail] });
     for (const c of clients) if (c.userEmail === targetEmail) pushStateTo(c, targetEmail);

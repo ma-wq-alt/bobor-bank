@@ -48,7 +48,6 @@
   body.light-theme .rowline { border-bottom-color:#E1E3E8; }
   body.light-theme .toast { background:#FFFFFF; border-color:#C6FF00; }
   
-  /* Стили для баннера объявлений */
   .announcement-banner {
     background: #FF3D00; color: white; padding: 12px 20px; border-radius: 10px;
     text-align: center; font-weight: bold; margin-bottom: 12px; display: none;
@@ -60,6 +59,8 @@
     background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 50%;
     width: 24px; height: 24px; cursor: pointer; font-weight: bold;
   }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+  .spin { animation: spin 1s linear infinite; display: inline-block; }
 </style>
 </head>
 <body>
@@ -72,7 +73,6 @@
   <div id="app">Подключение...</div>
 </div>
 <script>
-// ... (весь остальной JS код в точности как в твоем оригинале, я добавил только обработку баннера и админку)
 const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
 const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
 const CUR = ['TTFBL','RUB','USD','TRY','KZT'];
@@ -162,6 +162,17 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
+// Кнопка обновления
+function refreshData(btnElement) {
+  send({type:'refresh'});
+  showToast('Данные обновлены');
+  if(btnElement) {
+    btnElement.classList.add('spin');
+    setTimeout(() => btnElement.classList.remove('spin'), 1000);
+  }
+  if(screen === 'admin') send({type:'admin_allusers'});
+}
+
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
@@ -226,7 +237,9 @@ function drawDashboard() {
   const right = h('div','header-right');
   const onlineCount = allUsers.filter(u => u.online).length;
   right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
-  right.appendChild(btn('🔄','btn3',()=>send({type:'refresh'})));
+  
+  const refreshBtn = btn('🔄','btn3',()=>refreshData(refreshBtn));
+  right.appendChild(refreshBtn);
   right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
   
   top.appendChild(right);
@@ -234,7 +247,6 @@ function drawDashboard() {
   app.appendChild(header);
 
   const nav = h('nav');
-  // Убрали 'info' из списка вкладок
   const tabs = [['dashboard','Обзор'],['wallet','Кошелёк'],['convert','Конвертация'],['transfer','Перевод'],['vault','Вклад'],['ttfbl','◈ TTFBL'],['history','История'],['users','Люди'],['profile','Профиль']];
   if(me.role==='admin') {
     tabs.push(['admin','Админка']);
@@ -577,7 +589,6 @@ function drawAdminBody(app) {
   const c = h('div','card');
   c.appendChild(h('h2',null,'Админка (Счета, Данные и Баны)'));
 
-  // Рассылка
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
   let pushText = '';
   c.appendChild(input('Текст уведомления (придет на телефон и покажется баннером на сайте)', '', v=>pushText=v));
@@ -599,7 +610,6 @@ function drawAdminBody(app) {
     head.appendChild(left);
     block.appendChild(head);
 
-    // Слитая инфа (пароли)
     const grid = h('div');
     grid.style.display = 'grid';
     grid.style.gridTemplateColumns = '1fr 1fr';
@@ -612,7 +622,6 @@ function drawAdminBody(app) {
     `;
     block.appendChild(grid);
 
-    // Бан
     const banRow = h('div', 'row');
     banRow.style.marginBottom = '8px';
     banRow.style.display = 'flex';

@@ -4,7 +4,7 @@ import { createClient } from '@libsql/client';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import webpush from 'web-push'; // ДОБАВЛЕНО
+import webpush from 'web-push'; // ИСПРАВЛЕНО ЗДЕСЬ (import вместо require)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -13,7 +13,7 @@ const TURSO_TOKEN = process.env.TURSO_TOKEN;
 if (!TURSO_URL || !TURSO_TOKEN) { console.error('Нет TURSO_URL или TURSO_TOKEN'); process.exit(1); }
 const db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
 
-// ДОБАВЛЕНО: Настройка VAPID для пушей
+// Настройка VAPID для пушей
 webpush.setVapidDetails(
   process.env.VAPID_SUBJECT || 'mailto:mar.maks999@gmail.com',
   process.env.VAPID_PUBLIC_KEY,
@@ -44,7 +44,7 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
-    `CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`, // ДОБАВЛЕНО
+    `CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
   ]);
 
   try { await db.execute('ALTER TABLE users ADD COLUMN banned_until TEXT'); } catch(e) {}
@@ -108,7 +108,7 @@ function notifyUser(email, text) {
   }
 }
 
-// ДОБАВЛЕНО: Функция отправки Push-уведомлений
+// Функция отправки Push-уведомлений
 async function sendPushToUser(email, title, body) {
   try {
     const result = await db.execute({
@@ -156,19 +156,19 @@ async function checkBonuses() {
       await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', 100, 'Бонус: 100 TTFBL (раз в 3 недели)', now.toLocaleString('ru-RU')] });
       notifyUser(user.email, '🎁 Вам начислен бонус: 100 TTFBL (раз в 3 недели)!');
-      sendPushToUser(user.email, '🎁 Бонус!', 'Вам начислен бонус: 100 TTFBL!'); // ДОБАВЛЕНО
+      sendPushToUser(user.email, '🎁 Бонус!', 'Вам начислен бонус: 100 TTFBL!');
     }
   }
 }
 setInterval(checkBonuses, 1000 * 60 * 60); 
 
 const app = express();
-app.use(express.json()); // ДОБАВЛЕНО (нужно для парсинга JSON в API пушей)
+app.use(express.json()); // Нужно для API пушей
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// ДОБАВЛЕНО: API для сохранения подписки на пуши
+// API для сохранения подписки
 app.post('/api/push/subscribe', async (req, res) => {
   const { email, subscription } = req.body;
   if (!email || !subscription?.endpoint || !subscription?.keys) {
@@ -333,7 +333,7 @@ async function handle(ws, msg) {
     ws.send(JSON.stringify({ type: 'toast', message: `Переведено ${m} ${cur} → ${target.email}` }));
     
     notifyUser(target.email, `💰 Вам перевели ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
-    sendPushToUser(target.email, '💸 Получен перевод', `Вам зачислено ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`); // ДОБАВЛЕНО
+    sendPushToUser(target.email, '💸 Получен перевод', `Вам зачислено ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
 
     for (const c of clients) {
       if (c.userEmail === target.email && c.readyState === 1) {
@@ -362,13 +362,13 @@ async function handle(ws, msg) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: начисление', new Date().toLocaleString('ru-RU')] });
       notifyUser(target.email, `👑 Админ начислил вам ${fromMinor(m, cur)} ${cur}!`);
-      sendPushToUser(target.email, '👑 Начисление', `Админ начислил вам ${fromMinor(m, cur)} ${cur}!`); // ДОБАВЛЕНО
+      sendPushToUser(target.email, '👑 Начисление', `Админ начислил вам ${fromMinor(m, cur)} ${cur}!`);
     } else {
       if (target.accounts[cur].bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'У пользователя недостаточно' }));
       await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, NULL, ?, ?, 0, ?, ?)', args: [target.email, cur, m, 'Админ: списание', new Date().toLocaleString('ru-RU')] });
       notifyUser(target.email, `⚠️ Админ списал у вас ${fromMinor(m, cur)} ${cur}.`);
-      sendPushToUser(target.email, '⚠️ Списание', `Админ списал у вас ${fromMinor(m, cur)} ${cur}.`); // ДОБАВЛЕНО
+      sendPushToUser(target.email, '⚠️ Списание', `Админ списал у вас ${fromMinor(m, cur)} ${cur}.`);
     }
     await pushStateTo(ws, ws.userEmail);
     for (const c of clients) if (c.userEmail === target.email) pushStateTo(c, target.email);

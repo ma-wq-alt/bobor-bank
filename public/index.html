@@ -120,6 +120,7 @@ function connect() {
       if(m.message.includes('секретное')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } 
     }
     else if (m.type === 'toast') { showToast(m.message); }
+    else if (m.type === 'notify') { showToast(m.text); }
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }

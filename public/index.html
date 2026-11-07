@@ -229,6 +229,19 @@ function drawDashBody(app) {
   c1.appendChild(h('div','muted','Баланс в TTFBL'));
   c1.appendChild(h('div','big green', fmt(t,'TTFBL')));
   c1.appendChild(h('div','muted','≈ '+toRub(t)+' по курсу банка'));
+  
+  // ДОБАВЛЕНО: Кнопка включения пушей
+  const pushBtn = h('button', 'btn2', '🔔 Включить уведомления');
+  pushBtn.id = 'enable-push-btn';
+  pushBtn.style.marginTop = '12px';
+  pushBtn.style.display = 'block';
+  pushBtn.style.width = '100%';
+  c1.appendChild(pushBtn);
+  setTimeout(() => {
+    const b = document.getElementById('enable-push-btn');
+    if (b) b.addEventListener('click', enablePushNotifications);
+  }, 0);
+
   app.appendChild(c1);
 
   let total = 0;
@@ -515,6 +528,64 @@ window.onerror = function(msg, url, line){
   e.style.display='block';
   e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
 };
+
+// ДОБАВЛЕНО: Логика подписки на пуши
+const VAPID_PUBLIC_KEY = 'BDSQV3ErFOaHSypEHDpmWYwrtOl5ABCHm_kuHrVpAiFSY_QMNijaMF3-JUWb0RovQmUioZ_dzujoNezlVO9wo98';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+async function enablePushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Ваш браузер не поддерживает push-уведомления');
+    return;
+  }
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    alert('Вы отклонили разрешение на уведомления');
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    const userEmail = localStorage.getItem('bobor_email'); // Берем email из твоего ключа
+
+    const response = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: userEmail,
+        subscription: subscription.toJSON()
+      })
+    });
+
+    if (response.ok) {
+      alert('Уведомления успешно включены!');
+      document.getElementById('enable-push-btn').style.display = 'none';
+    } else {
+      alert('Ошибка сохранения подписки на сервере');
+    }
+  } catch (error) {
+    console.error('Ошибка при подписке на пуши:', error);
+    alert('Ошибка: ' + error.message);
+  }
+}
 
 connect();
 </script>

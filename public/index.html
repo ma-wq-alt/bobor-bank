@@ -41,12 +41,6 @@
   .login-box { max-width: 400px; margin: 50px auto; }
   .avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
   .avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #C6FF00; margin-bottom: 10px; }
-  body.light-theme { background:#F0F2F5; color:#1A1A1A; }
-  body.light-theme .card { background:#FFFFFF; border-color:#E1E3E8; }
-  body.light-theme .muted { color:#65676B; }
-  body.light-theme input, body.light-theme select { background:#F8F9FA; color:#1A1A1A; border-color:#E1E3E8; }
-  body.light-theme .rowline { border-bottom-color:#E1E3E8; }
-  body.light-theme .toast { background:#FFFFFF; border-color:#C6FF00; }
   
   .announcement-banner {
     background: #FF3D00; color: white; padding: 12px 20px; border-radius: 10px;
@@ -59,6 +53,22 @@
     background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 50%;
     width: 24px; height: 24px; cursor: pointer; font-weight: bold;
   }
+
+  /* СВЕТЛАЯ ТЕМА */
+  body.light-theme { background:#F0F2F5; color:#1A1A1A; }
+  body.light-theme .card { background:#FFFFFF; border-color:#E1E3E8; }
+  body.light-theme .muted { color:#65676B; }
+  body.light-theme input, body.light-theme select { background:#F8F9FA; color:#1A1A1A; border-color:#E1E3E8; }
+  body.light-theme .rowline { border-bottom-color:#E1E3E8; }
+  body.light-theme .toast { background:#FFFFFF; border-color:#C6FF00; }
+  
+  /* Фикс невидимых кнопок в светлой теме */
+  body.light-theme .btn3 { background: rgba(0,0,0,.08); color: #1A1A1A; }
+  body.light-theme nav button { color: #65676B; }
+  body.light-theme nav button.on { color: #FF3D00; }
+  body.light-theme .formula { background: rgba(0,0,0,.05); }
+  body.light-theme .acc-row, body.light-theme .user-block { background: rgba(0,0,0,.03); }
+
   @keyframes spin { 100% { transform: rotate(360deg); } }
   .spin { animation: spin 1s linear infinite; display: inline-block; }
 </style>
@@ -162,7 +172,6 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// Кнопка обновления
 function refreshData(btnElement) {
   send({type:'refresh'});
   showToast('Данные обновлены');

@@ -83,46 +83,7 @@ let savedSecret = localStorage.getItem('bobor_secret');
 
 function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 
-// === БЛОК ПРОВЕРКИ ПАСПОРТА ===
-function checkPassport() {
-  if (window.bobor_authenticated) return connect();
-
-  document.getElementById('app').innerHTML = `
-    <div class="card" style="text-align:center;padding:50px;">
-      <h1 style="color:#FFB800;">⏳ ПРОВЕРКА...</h1>
-      <p class="muted">Проверяем ваш BOBOR-ID...</p>
-    </div>
-  `;
-
-  let emailToCheck = savedEmail || localStorage.getItem('id_email');
-
-  if (!emailToCheck) {
-    connect(); // Если нет email, пускаем на экран входа (для новых)
-    return;
-  }
-
-  fetch('https://bobor-passport.onrender.com/api/approval/' + emailToCheck)
-    .then(r => r.json())
-    .then(data => {
-      if (data.approved) {
-        connect(); // Паспорт есть - в банк
-      } else {
-        document.getElementById('app').innerHTML = `
-          <div class="card" style="text-align:center;padding:50px;">
-            <h1 style="color:#FFB800;">⏳ ОЖИДАНИЕ</h1>
-            <p class="muted">Ваш BOBOR-ID не подтвержден.</p>
-            <button class="btn2" style="width:100%;margin-top:20px;" onclick="window.open('https://bobor-passport.onrender.com', '_blank')">Перейти в BOBOR-ID</button>
-            <button class="btn" style="width:100%;margin-top:10px;" onclick="location.reload()">Проверить снова</button>
-          </div>
-        `;
-      }
-    })
-    .catch(() => { connect(); });
-}
-
-// === ОСНОВНОЙ КОД БАНКА ===
 function connect() {
-  window.bobor_authenticated = true;
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + window.location.host + '/');
   
@@ -148,7 +109,6 @@ function connect() {
       localStorage.removeItem('bobor_email');
       localStorage.removeItem('bobor_secret');
       askSecretForEmail = null;
-      window.bobor_authenticated = false;
       render(); 
     }
     else if (m.type === 'ask_secret') { 
@@ -167,7 +127,6 @@ function connect() {
 }
 function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
 
-// === ОТРИСОВКА ИНТЕРФЕЙСА (КАК В СТАРОЙ ВЕРСИИ) ===
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
   const c = h('div','card');
@@ -556,8 +515,7 @@ window.onerror = function(msg, url, line){
   e.textContent = 'ОШИБКА: '+msg+' (строка '+line+')';
 };
 
-// СТАРТ
-checkPassport();
+connect();
 </script>
 </body>
 </html>

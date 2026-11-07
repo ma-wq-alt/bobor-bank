@@ -75,7 +75,6 @@ let adminUsers = [];
 let allUsers = [];
 let convertState = { from:'TTFBL', to:'RUB', amt:'100' };
 let toastText = '';
-function showToast(t) { toastText = t; render(); setTimeout(()=>{ if(toastText===t){toastText='';render();} }, 3000); }
 let historyLoaded = false;
 let askSecretForEmail = null;
 

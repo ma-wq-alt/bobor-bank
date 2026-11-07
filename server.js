@@ -5,7 +5,6 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import webpush from 'web-push';
-import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -137,28 +136,11 @@ async function sendPushToUser(email, title, body) {
   } catch (err) { console.error('sendPushToUser error:', err); }
 }
 
-async function sendPushToAll(title, body) {
-  const subs = await db.execute('SELECT endpoint, p256dh, auth FROM push_subscriptions');
-  const payload = JSON.stringify({ title, body });
-  for (const sub of subs.rows) {
-    const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-    try {
-      await webpush.sendNotification(pushSubscription, payload);
-    } catch (err) {
-      if (err.statusCode === 410 || err.statusCode === 404) {
-        await db.execute({ sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [sub.endpoint] });
-      }
-    }
-  }
-}
-
-// === БОНУСЫ И ВКЛАДЫ ===
 async function checkBonusesAndVaults() {
   const users = await db.execute('SELECT email, last_bonus_date, last_vault_date, vault_type FROM users');
   const now = new Date();
   
   for (const user of users.rows) {
-    // Бонус раз в 21 день
     const lastBonusDate = new Date(user.last_bonus_date || 0);
     if ((now - lastBonusDate) / (1000 * 60 * 60 * 24) >= 21) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
@@ -168,7 +150,6 @@ async function checkBonusesAndVaults() {
       sendPushToUser(user.email, '🎁 Бонус!', 'Вам начислен бонус: 100 TTFBL!');
     }
 
-    // Проценты на вклад
     const lastVaultDate = new Date(user.last_vault_date || 0);
     if ((now - lastVaultDate) / (1000 * 60 * 60 * 24) >= 7) {
       const vaultAcc = await db.execute({ sql: 'SELECT vault_bal, vault_locked_until FROM accounts WHERE email = ? AND currency = ?', args: [user.email, 'TTFBL'] });
@@ -176,7 +157,7 @@ async function checkBonusesAndVaults() {
       const lockedUntil = vaultAcc.rows[0]?.vault_locked_until;
 
       if (vaultBal > 0 && (!lockedUntil || new Date(lockedUntil) <= now)) {
-        const interest = user.vault_type === 'premium' ? 10 : 5; // 10 для премиум, 5 для базового
+        const interest = user.vault_type === 'premium' ? 10 : 5;
         await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [interest, user.email, 'TTFBL'] });
         await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', interest, 'Начисление процентов на вклад', now.toLocaleString('ru-RU')] });
         notifyUser(user.email, `💸 Начислены проценты на вклад: ${interest} TTFBL!`);
@@ -189,7 +170,7 @@ async function checkBonusesAndVaults() {
 setInterval(checkBonusesAndVaults, 1000 * 60 * 60); 
 
 const app = express();
-app.use(express.json({ limit: '10mb' })); // Увеличен лимит для аватарок Base64
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -266,11 +247,7 @@ async function handle(ws, msg) {
     }
     ws.userEmail = u.email;
     broadcastUsers();
-    
-    // Пуши о входе с нового устройства (если это не авто-вход)
-    if (!auto) {
-        sendPushToUser(u.email, '🔐 Вход в аккаунт', 'Выполнен вход в ваш аккаунт с нового устройства.');
-    }
+    if (!auto) sendPushToUser(u.email, '🔐 Вход в аккаунт', 'Выполнен вход в ваш аккаунт с нового устройства.');
     return pushStateTo(ws, ws.userEmail);
   }
 
@@ -293,7 +270,6 @@ async function handle(ws, msg) {
     }
   }
 
-  // === БЕЗОПАСНОСТЬ ===
   if (msg.type === 'change_pwd') {
     const { oldPwd, newPwd, secret } = msg;
     const chk = await db.execute({ sql: 'SELECT pwd, secret_word FROM users WHERE email = ?', args: [me.email] });
@@ -322,7 +298,6 @@ async function handle(ws, msg) {
     return ws.send(JSON.stringify({ type: 'toast', message: '✅ Аватарка обновлена' }));
   }
 
-  // === ВКЛАДЫ ===
   if (msg.type === 'vault_settings') {
     const { type, auto } = msg;
     if (type) await db.execute({ sql: 'UPDATE users SET vault_type = ? WHERE email = ?', args: [type, me.email] });
@@ -379,7 +354,6 @@ async function handle(ws, msg) {
     
     await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m + fee, me.email, cur] });
     
-    // Проверка авто-вклада у получателя
     if (cur === 'TTFBL' && target.auto_vault === 1) {
       await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
       notifyUser(target.email, `💰 Вам перевели ${fromMinor(m, cur)} ${cur} (Зачислено на вклад из-за авто-режима)`);
@@ -452,18 +426,29 @@ async function handle(ws, msg) {
   if (msg.type === 'admin_push_all') {
     if (me.role !== 'admin') return;
     const { text } = msg;
-    await sendPushToAll('📢 Объявление от Банка', text);
+    // Пуш на телефоны
+    const subs = await db.execute('SELECT endpoint, p256dh, auth FROM push_subscriptions');
+    const payload = JSON.stringify({ title: '📢 Объявление от Банка', body: text });
+    for (const sub of subs.rows) {
+      const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+      try { await webpush.sendNotification(pushSubscription, payload); } catch (err) {}
+    }
+    // Показ баннера на сайте (всем активным)
+    const bannerData = JSON.stringify({ type: 'announcement', text: text });
+    for (const c of clients) {
+      if (c.readyState === 1) c.send(bannerData);
+    }
     return ws.send(JSON.stringify({ type: 'toast', message: '✅ Рассылка отправлена' }));
   }
 
   if (msg.type === 'admin_ban') {
     if (me.role !== 'admin') return;
-    const { targetEmail, hours } = msg;
+    const { targetEmail, minutes } = msg;
     let banned_until = null;
-    if (hours > 0) {
-      const d = new Date(); d.setHours(d.getHours() + hours);
+    if (minutes > 0) {
+      const d = new Date(); d.setMinutes(d.getMinutes() + minutes);
       banned_until = d.toISOString();
-      sendPushToUser(targetEmail, '🚫 Вы забанены!', `Админ ограничил ваш доступ на ${hours} часов.`);
+      sendPushToUser(targetEmail, '🚫 Вы забанены!', `Админ ограничил ваш доступ на ${minutes} мин.`);
     } else {
       sendPushToUser(targetEmail, '✅ Вы разбанены!', 'Админ снял с вас ограничения.');
     }

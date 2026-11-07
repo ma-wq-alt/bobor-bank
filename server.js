@@ -105,7 +105,7 @@ async function checkBonuses() {
   for (const user of users.rows) {
     const lastDate = new Date(user.last_bonus_date || 0);
     const diffDays = (now - lastDate) / (1000 * 60 * 60 * 24);
-    if (diffDays >= 14) {
+    if (diffDays >= 21) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, user.email, 'TTFBL'] });
       await db.execute({ sql: 'UPDATE users SET last_bonus_date = ? WHERE email = ?', args: [now.toISOString(), user.email] });
       await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', 100, 'Бонус: 100 TTFBL (раз в 2 недели)', now.toLocaleString('ru-RU')] });

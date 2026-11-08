@@ -395,7 +395,6 @@ async function handle(ws, msg) {
     return ws.send(JSON.stringify({ type: 'history', txs: r.rows }));
   }
 
-  // === АДМИНКА ===
   if (msg.type === 'admin_mint' || msg.type === 'admin_burn') {
     if (me.role !== 'admin') return ws.send(JSON.stringify({ type: 'error', message: 'Только админ' }));
     const { targetEmail, cur, amt } = msg;
@@ -433,7 +432,7 @@ async function handle(ws, msg) {
       const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
       try { await webpush.sendNotification(pushSubscription, payload); } catch (err) {}
     }
-    // Показ баннера на сайте (всем активным)
+    // Показ баннера на сайте
     const bannerData = JSON.stringify({ type: 'announcement', text: text });
     for (const c of clients) {
       if (c.readyState === 1) c.send(bannerData);

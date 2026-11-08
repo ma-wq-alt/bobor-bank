@@ -596,21 +596,27 @@ function drawAdminBody(app) {
   c.appendChild(h('h2',null,'Админка (Счета, Данные и Баны)'));
 
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
-  
   const pushInput = document.createElement('input');
-  pushInput.id = 'admin-push-text';
   pushInput.placeholder = 'Текст уведомления...';
   pushInput.style.marginBottom = '8px';
   c.appendChild(pushInput);
 
-  c.appendChild(btn('Отправить Push всем','btn2',()=>{
-    const text = document.getElementById('admin-push-text').value;
-    if(!text || text.trim() === '') {
-      return showToast('❌ Введите текст уведомления!');
+  const pushBtn = document.createElement('button');
+  pushBtn.className = 'btn2';
+  pushBtn.textContent = 'Отправить Push всем';
+  pushBtn.onclick = () => {
+    const text = pushInput.value;
+    if(!text) return alert('Введите текст!');
+    
+    if(ws && ws.readyState === 1) {
+      ws.send(JSON.stringify({ type: 'admin_push_all', text: text }));
+      alert('Запрос на отправку ушел!');
+      pushInput.value = '';
+    } else {
+      alert('Нет соединения с сервером');
     }
-    send({type:'admin_push_all', text: text.trim()});
-    document.getElementById('admin-push-text').value = '';
-  }));
+  };
+  c.appendChild(pushBtn);
 
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
 

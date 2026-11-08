@@ -58,10 +58,12 @@
 </head>
 <body>
 <div class="wrap">
+  <!-- БАННЕР ОБЪЯВЛЕНИЙ -->
   <div id="announcement-banner" class="announcement-banner">
     <span id="announcement-text"></span>
     <button class="announcement-close" onclick="document.getElementById('announcement-banner').style.display='none'">×</button>
   </div>
+  
   <div id="err"></div>
   <div id="app">Подключение...</div>
 </div>
@@ -119,6 +121,7 @@ function connect() {
   ws.onerror = () => {};
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
+    
     if (m.type === 'state') { 
       me = m.user; accounts = m.accounts; screen = 'dashboard'; 
       localStorage.setItem('bobor_email', me.email);
@@ -139,10 +142,16 @@ function connect() {
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
+    
+    // ОБРАБОТКА БАННЕРА
     else if (m.type === 'announcement') {
       const banner = document.getElementById('announcement-banner');
       const text = document.getElementById('announcement-text');
-      if(banner && text) { text.textContent = '📢 ' + m.text; banner.style.display = 'block'; }
+      if(banner && text) { 
+        text.textContent = '📢 ' + m.text; 
+        banner.style.display = 'block'; 
+        window.scrollTo({ top: 0, behavior: 'smooth' }); // Скроллим наверх к баннеру
+      }
     }
   };
 }
@@ -338,9 +347,7 @@ function drawWalletBody(app) {
 function drawVaultBody(app) {
   const c = h('div','card ttfbl');
   c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
-  
   c.appendChild(h('div','muted', 'Базовый: 5 TTFBL/нед. Снять можно в любой момент.'));
-
   c.appendChild(h('div','muted','На вкладе:'));
   c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));
   
@@ -601,7 +608,7 @@ function drawAdminBody(app) {
       if(!txt) { showToast('❌ Введите текст!'); return; }
       if(ws && ws.readyState === 1) {
         ws.send(JSON.stringify({ type: 'admin_push_all', text: txt }));
-        showToast('✅ Рассылка отправлена!');
+        showToast('✅ Запрос отправлен!');
         document.getElementById('admin-push-text').value = '';
       } else { showToast('❌ Нет соединения с сервером'); }
     ">Отправить Push всем</button>

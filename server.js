@@ -300,6 +300,8 @@ async function handle(ws, msg) {
     const { type, auto } = msg;
     if (type) await db.execute({ sql: 'UPDATE users SET vault_type = ? WHERE email = ?', args: [type, me.email] });
     if (auto !== undefined) await db.execute({ sql: 'UPDATE users SET auto_vault = ? WHERE email = ?', args: [auto ? 1 : 0, me.email] });
+    
+    // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ДАННЫЕ КЛИЕНТА
     await pushStateTo(ws, me.email);
     return;
   }

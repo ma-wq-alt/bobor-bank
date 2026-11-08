@@ -39,8 +39,8 @@ function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 89999
 
 async function initSchema() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT, last_vault_date TEXT, avatar TEXT, vault_type TEXT DEFAULT 'base', auto_vault INTEGER DEFAULT 0)`,
-    `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, vault_locked_until TEXT, PRIMARY KEY (email, currency))`,
+    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT, last_vault_date TEXT, avatar TEXT)`,
+    `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
   ]);
@@ -51,10 +51,7 @@ async function initSchema() {
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN last_vault_date TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN avatar TEXT'); } catch(e) {}
-  try { await db.execute("ALTER TABLE users ADD COLUMN vault_type TEXT DEFAULT 'base'"); } catch(e) {}
-  try { await db.execute('ALTER TABLE users ADD COLUMN auto_vault INTEGER DEFAULT 0'); } catch(e) {}
   try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
-  try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_locked_until TEXT'); } catch(e) {}
 
   try {
     const check = await db.execute({ sql: 'SELECT email FROM users WHERE email = ?', args: [ADMIN_EMAIL] });
@@ -97,8 +94,8 @@ async function getUser(email) {
   const u = r.rows[0];
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
-  for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0), locked_until: a.vault_locked_until };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, avatar: u.avatar, vault_type: u.vault_type, auto_vault: u.auto_vault };
+  for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, avatar: u.avatar };
 }
 
 const clients = new Set();
@@ -135,7 +132,7 @@ async function sendPushToUser(email, title, body) {
 }
 
 async function checkBonusesAndVaults() {
-  const users = await db.execute('SELECT email, last_bonus_date, last_vault_date, vault_type FROM users');
+  const users = await db.execute('SELECT email, last_bonus_date, last_vault_date FROM users');
   const now = new Date();
   
   for (const user of users.rows) {
@@ -150,12 +147,11 @@ async function checkBonusesAndVaults() {
 
     const lastVaultDate = new Date(user.last_vault_date || 0);
     if ((now - lastVaultDate) / (1000 * 60 * 60 * 24) >= 7) {
-      const vaultAcc = await db.execute({ sql: 'SELECT vault_bal, vault_locked_until FROM accounts WHERE email = ? AND currency = ?', args: [user.email, 'TTFBL'] });
+      const vaultAcc = await db.execute({ sql: 'SELECT vault_bal FROM accounts WHERE email = ? AND currency = ?', args: [user.email, 'TTFBL'] });
       const vaultBal = Number(vaultAcc.rows[0]?.vault_bal || 0);
-      const lockedUntil = vaultAcc.rows[0]?.vault_locked_until;
-
-      if (vaultBal > 0 && (!lockedUntil || new Date(lockedUntil) <= now)) {
-        const interest = user.vault_type === 'premium' ? 10 : 5;
+      
+      if (vaultBal > 0) {
+        const interest = 5;
         await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [interest, user.email, 'TTFBL'] });
         await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (NULL, ?, ?, ?, 0, ?, ?)', args: [user.email, 'TTFBL', interest, 'Начисление процентов на вклад', now.toLocaleString('ru-RU')] });
         notifyUser(user.email, `💸 Начислены проценты на вклад: ${interest} TTFBL!`);
@@ -296,30 +292,14 @@ async function handle(ws, msg) {
     return ws.send(JSON.stringify({ type: 'toast', message: '✅ Аватарка обновлена' }));
   }
 
-  if (msg.type === 'vault_settings') {
-    const { type, auto } = msg;
-    if (type) await db.execute({ sql: 'UPDATE users SET vault_type = ? WHERE email = ?', args: [type, me.email] });
-    if (auto !== undefined) await db.execute({ sql: 'UPDATE users SET auto_vault = ? WHERE email = ?', args: [auto ? 1 : 0, me.email] });
-    
-    // ПРИНУДИТЕЛЬНО ОБНОВЛЯЕМ ДАННЫЕ КЛИЕНТА
-    await pushStateTo(ws, me.email);
-    return;
-  }
-
   if (msg.type === 'vault_deposit') {
     const { amt } = msg;
     const m = toMinor(amt, 'TTFBL');
     if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
     if (me.accounts.TTFBL.bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL' }));
     
-    let lockedUntil = me.accounts.TTFBL.locked_until;
-    if (me.vault_type === 'premium') {
-      const d = new Date(); d.setDate(d.getDate() + 30);
-      lockedUntil = d.toISOString();
-    }
-
     await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
-    await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ?, vault_locked_until = ? WHERE email = ? AND currency = ?', args: [m, lockedUntil, me.email, 'TTFBL'] });
+    await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [m, me.email, 'TTFBL'] });
     await pushStateTo(ws, ws.userEmail);
     notifyUser(me.email, `✅ На вклад положено ${fromMinor(m, 'TTFBL')} TTFBL`);
     return;
@@ -327,9 +307,6 @@ async function handle(ws, msg) {
 
   if (msg.type === 'vault_withdraw') {
     const { amt } = msg;
-    if (me.vault_type === 'premium' && me.accounts.TTFBL.locked_until && new Date(me.accounts.TTFBL.locked_until) > new Date()) {
-      return ws.send(JSON.stringify({ type: 'error', message: 'Премиум вклад заблокирован до ' + new Date(me.accounts.TTFBL.locked_until).toLocaleDateString() }));
-    }
     const m = toMinor(amt, 'TTFBL');
     if (m <= 0) return ws.send(JSON.stringify({ type: 'error', message: 'Сумма > 0' }));
     if (me.accounts.TTFBL.vault_bal < m) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно на вкладе' }));
@@ -353,16 +330,10 @@ async function handle(ws, msg) {
     if (me.accounts[cur].bal < m + fee) return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно (с комиссией)' }));
     
     await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [m + fee, me.email, cur] });
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
     
-    if (cur === 'TTFBL' && target.auto_vault === 1) {
-      await db.execute({ sql: 'UPDATE accounts SET vault_bal = vault_bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-      notifyUser(target.email, `💰 Вам перевели ${fromMinor(m, cur)} ${cur} (Зачислено на вклад из-за авто-режима)`);
-      sendPushToUser(target.email, '💸 Получен перевод (на вклад)', `Вам зачислено ${fromMinor(m, cur)} ${cur} на вклад от ${me.display_name}!`);
-    } else {
-      await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [m, target.email, cur] });
-      notifyUser(target.email, `💰 Вам перевели ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
-      sendPushToUser(target.email, '💸 Получен перевод', `Вам зачислено ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
-    }
+    notifyUser(target.email, `💰 Вам перевели ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
+    sendPushToUser(target.email, '💸 Получен перевод', `Вам зачислено ${fromMinor(m, cur)} ${cur} от ${me.display_name}!`);
 
     await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [me.email, target.email, cur, m, fee, 'Перевод', new Date().toLocaleString('ru-RU')] });
     await pushStateTo(ws, ws.userEmail);

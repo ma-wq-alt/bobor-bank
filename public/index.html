@@ -596,27 +596,24 @@ function drawAdminBody(app) {
   c.appendChild(h('h2',null,'Админка (Счета, Данные и Баны)'));
 
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
+  
   const pushInput = document.createElement('input');
+  pushInput.id = 'admin-push-text';
   pushInput.placeholder = 'Текст уведомления...';
   pushInput.style.marginBottom = '8px';
   c.appendChild(pushInput);
 
-  const pushBtn = document.createElement('button');
-  pushBtn.className = 'btn2';
-  pushBtn.textContent = 'Отправить Push всем';
-  pushBtn.onclick = () => {
-    const text = pushInput.value;
-    if(!text) return alert('Введите текст!');
-    
+  const btnContainer = document.createElement('div');
+  btnContainer.innerHTML = `<button class="btn2" onclick="
+    const txt = document.getElementById('admin-push-text').value;
+    if(!txt) { alert('Введите текст!'); return; }
     if(ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'admin_push_all', text: text }));
-      alert('Запрос на отправку ушел!');
-      pushInput.value = '';
-    } else {
-      alert('Нет соединения с сервером');
-    }
-  };
-  c.appendChild(pushBtn);
+      ws.send(JSON.stringify({ type: 'admin_push_all', text: txt }));
+      alert('Запрос отправлен!');
+      document.getElementById('admin-push-text').value = '';
+    } else { alert('Нет соединения'); }
+  ">Отправить Push всем</button>`;
+  c.appendChild(btnContainer);
 
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
 

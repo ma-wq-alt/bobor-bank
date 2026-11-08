@@ -7,7 +7,6 @@ import { fileURLToPath } from 'url';
 import webpush from 'web-push';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const TURSO_URL = process.env.TURSO_URL;
 const TURSO_TOKEN = process.env.TURSO_TOKEN;
 if (!TURSO_URL || !TURSO_TOKEN) { console.error('Нет TURSO_URL или TURSO_TOKEN'); process.exit(1); }
@@ -130,7 +129,6 @@ async function sendPushToUser(email, title, body) {
         if (err.statusCode === 410 || err.statusCode === 404) {
           await db.execute({ sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [sub.endpoint] });
         }
-        console.error('Push send error:', err.message);
       }
     }
   } catch (err) { console.error('sendPushToUser error:', err); }

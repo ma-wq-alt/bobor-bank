@@ -596,10 +596,20 @@ function drawAdminBody(app) {
   c.appendChild(h('h2',null,'Админка (Счета, Данные и Баны)'));
 
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
-  let pushText = '';
-  c.appendChild(input('Текст уведомления (придет на телефон и покажется баннером на сайте)', '', v=>pushText=v));
+  
+  const pushInput = document.createElement('input');
+  pushInput.id = 'admin-push-text';
+  pushInput.placeholder = 'Текст уведомления...';
+  pushInput.style.marginBottom = '8px';
+  c.appendChild(pushInput);
+
   c.appendChild(btn('Отправить Push всем','btn2',()=>{
-    if(pushText) send({type:'admin_push_all', text: pushText});
+    const text = document.getElementById('admin-push-text').value;
+    if(!text || text.trim() === '') {
+      return showToast('❌ Введите текст уведомления!');
+    }
+    send({type:'admin_push_all', text: text.trim()});
+    document.getElementById('admin-push-text').value = '';
   }));
 
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));

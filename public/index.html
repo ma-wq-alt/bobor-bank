@@ -339,33 +339,7 @@ function drawVaultBody(app) {
   const c = h('div','card ttfbl');
   c.appendChild(h('h2',null,'◈ Вклад в TTFBL'));
   
-  const typeRow = h('div','rowline');
-  typeRow.appendChild(h('span','muted','Тариф:'));
-  
-  const baseBtn = h('button', me.vault_type === 'base' ? 'btn2' : 'btn3', 'Базовый');
-  baseBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', type: 'base' }));
-  typeRow.appendChild(baseBtn);
-  
-  const premBtn = h('button', me.vault_type === 'premium' ? 'btn2' : 'btn3', 'Премиум');
-  premBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', type: 'premium' }));
-  typeRow.appendChild(premBtn);
-  
-  c.appendChild(typeRow);
-  
-  c.appendChild(h('div','muted', me.vault_type === 'premium' ? 'Премиум: 10 TTFBL/нед. Блокировка на 30 дней.' : 'Базовый: 5 TTFBL/нед. Снять можно в любой момент.'));
-
-  if (me.vault_type === 'premium' && accounts.TTFBL.locked_until) {
-    c.appendChild(h('div','muted red', 'Заблокировано до: ' + new Date(accounts.TTFBL.locked_until).toLocaleDateString('ru-RU')));
-  }
-
-  const autoRow = h('div','rowline');
-  autoRow.appendChild(h('span','muted','Автопополнение:'));
-  
-  const autoBtn = h('button', me.auto_vault ? 'btn2' : 'btn3', me.auto_vault ? 'ВКЛ' : 'ВЫКЛ');
-  autoBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', auto: !me.auto_vault }));
-  autoRow.appendChild(autoBtn);
-  
-  c.appendChild(autoRow);
+  c.appendChild(h('div','muted', 'Базовый: 5 TTFBL/нед. Снять можно в любой момент.'));
 
   c.appendChild(h('div','muted','На вкладе:'));
   c.appendChild(h('div','big green', fmt(accounts.TTFBL.vault_bal || 0,'TTFBL')));

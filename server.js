@@ -425,14 +425,12 @@ async function handle(ws, msg) {
   if (msg.type === 'admin_push_all') {
     if (me.role !== 'admin') return;
     const { text } = msg;
-    // Пуш на телефоны
     const subs = await db.execute('SELECT endpoint, p256dh, auth FROM push_subscriptions');
     const payload = JSON.stringify({ title: '📢 Объявление от Банка', body: text });
     for (const sub of subs.rows) {
       const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
       try { await webpush.sendNotification(pushSubscription, payload); } catch (err) {}
     }
-    // Показ баннера на сайте
     const bannerData = JSON.stringify({ type: 'announcement', text: text });
     for (const c of clients) {
       if (c.readyState === 1) c.send(bannerData);

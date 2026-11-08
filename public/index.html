@@ -598,12 +598,12 @@ function drawAdminBody(app) {
     <input type="text" id="admin-push-text" placeholder="Текст уведомления..." style="width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;margin-bottom:8px;">
     <button class="btn2" onclick="
       const txt = document.getElementById('admin-push-text').value;
-      if(!txt) { alert('Введите текст!'); return; }
+      if(!txt) { showToast('❌ Введите текст!'); return; }
       if(ws && ws.readyState === 1) {
         ws.send(JSON.stringify({ type: 'admin_push_all', text: txt }));
-        alert('Запрос на рассылку отправлен!');
+        showToast('✅ Рассылка отправлена!');
         document.getElementById('admin-push-text').value = '';
-      } else { alert('Нет соединения с сервером'); }
+      } else { showToast('❌ Нет соединения с сервером'); }
     ">Отправить Push всем</button>
   `;
   c.appendChild(pushWrap);

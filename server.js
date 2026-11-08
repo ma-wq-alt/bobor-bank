@@ -396,17 +396,48 @@ async function handle(ws, msg) {
   if (msg.type === 'admin_push_all') {
     if (me.role !== 'admin') return;
     const { text } = msg;
-    const subs = await db.execute('SELECT endpoint, p256dh, auth FROM push_subscriptions');
-    const payload = JSON.stringify({ title: '📢 Объявление от Банка', body: text });
-    for (const sub of subs.rows) {
-      const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-      try { await webpush.sendNotification(pushSubscription, payload); } catch (err) {}
+    console.log(`[PUSH] Админ ${me.email} начал рассылку: "${text}"`);
+    
+    try {
+      const subs = await db.execute('SELECT email, endpoint, p256dh, auth FROM push_subscriptions');
+      console.log(`[PUSH] Найдено подписок в базе: ${subs.rows.length}`);
+      
+      const payload = JSON.stringify({ title: '📢 Объявление от Банка', body: text });
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const sub of subs.rows) {
+        const pushSubscription = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+        try { 
+          await webpush.sendNotification(pushSubscription, payload); 
+          successCount++;
+          console.log(`[PUSH] Успешно отправлено на ${sub.email}`);
+        } catch (err) { 
+          errorCount++;
+          console.error(`[PUSH] Ошибка отправки на ${sub.email}: ${err.statusCode} - ${err.message}`);
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await db.execute({ sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [sub.endpoint] });
+            console.log(`[PUSH] Удалена устаревшая подписка ${sub.email}`);
+          }
+        }
+      }
+      console.log(`[PUSH] Итог: Успешно ${successCount}, Ошибок ${errorCount}`);
+
+      const bannerData = JSON.stringify({ type: 'announcement', text: text });
+      let bannerCount = 0;
+      for (const c of clients) {
+        if (c.readyState === 1) {
+          c.send(bannerData);
+          bannerCount++;
+        }
+      }
+      console.log(`[BANNER] Отправлен баннер ${bannerCount} активным клиентам.`);
+
+      return ws.send(JSON.stringify({ type: 'toast', message: `✅ Рассылка завершена. Успешно: ${successCount}, Ошибок: ${errorCount}` }));
+    } catch (globalErr) {
+      console.error('[PUSH] Критическая ошибка при рассылке:', globalErr);
+      return ws.send(JSON.stringify({ type: 'error', message: 'Ошибка сервера при рассылке' }));
     }
-    const bannerData = JSON.stringify({ type: 'announcement', text: text });
-    for (const c of clients) {
-      if (c.readyState === 1) c.send(bannerData);
-    }
-    return ws.send(JSON.stringify({ type: 'toast', message: '✅ Рассылка отправлена' }));
   }
 
   if (msg.type === 'admin_ban') {

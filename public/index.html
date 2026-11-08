@@ -41,19 +41,8 @@
   .login-box { max-width: 400px; margin: 50px auto; }
   .avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; vertical-align: middle; margin-right: 6px; }
   .avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid #C6FF00; margin-bottom: 10px; }
-  
-  .announcement-banner {
-    background: #FF3D00; color: white; padding: 12px 20px; border-radius: 10px;
-    text-align: center; font-weight: bold; margin-bottom: 12px; display: none;
-    box-shadow: 0 4px 15px rgba(255, 61, 0, 0.4);
-    position: relative;
-  }
-  .announcement-close {
-    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-    background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 50%;
-    width: 24px; height: 24px; cursor: pointer; font-weight: bold;
-  }
-
+  .announcement-banner { background: #FF3D00; color: white; padding: 12px 20px; border-radius: 10px; text-align: center; font-weight: bold; margin-bottom: 12px; display: none; box-shadow: 0 4px 15px rgba(255, 61, 0, 0.4); position: relative; }
+  .announcement-close { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.2); border: none; color: white; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-weight: bold; }
   body.light-theme { background:#F0F2F5; color:#1A1A1A; }
   body.light-theme .card { background:#FFFFFF; border-color:#E1E3E8; }
   body.light-theme .muted { color:#65676B; }
@@ -65,9 +54,6 @@
   body.light-theme nav button.on { color: #FF3D00; }
   body.light-theme .formula { background: rgba(0,0,0,.05); }
   body.light-theme .acc-row, body.light-theme .user-block { background: rgba(0,0,0,.03); }
-  
-  @keyframes spin { 100% { transform: rotate(360deg); } }
-  .spin { animation: spin 1s linear infinite; display: inline-block; }
 </style>
 </head>
 <body>
@@ -96,7 +82,6 @@ function fmt(m,c){ return (c==='TTFBL'?'◈ ':'') + fromMinor(m,c).toFixed(DEC[c
 function toRub(tt){ return (fromMinor(tt,'TTFBL')*RUB_PER_TTFBL).toFixed(2)+' RUB'; }
 function formula(f,t){ if(f==='TTFBL'||t==='TTFBL') return '1 TTFBL = 0.1 RUB (жёстко)'; return '1 '+f+' = '+(FIAT[f]/FIAT[t]).toFixed(4)+' '+t; }
 function h(tag,cls,text){ const n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n; }
-function btn(label,cls,fn){ const b=h('button',cls,label); b.onclick=fn; return b; }
 function input(ph,val,on,type){ const i=document.createElement('input'); i.placeholder=ph; i.value=val||''; if(type)i.type=type; i.oninput=()=>on(i.value); return i; }
 function sel(cur,fn){ const s=document.createElement('select'); for(const c of CUR){ const o=document.createElement('option'); o.value=c; o.textContent=c; if(c===cur)o.selected=true; s.appendChild(o);} s.onchange=()=>fn(s.value); return s; }
 function clear(n){ while(n.firstChild)n.removeChild(n.firstChild); }
@@ -125,7 +110,7 @@ function connect() {
   
   ws.onopen = () => { 
     if (savedEmail && savedSecret) {
-      send({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true});
+      ws.send(JSON.stringify({type:'login', email: savedEmail, pwd: null, secret: savedSecret, auto: true}));
     } else {
       render();
     }
@@ -147,14 +132,8 @@ function connect() {
       askSecretForEmail = null;
       render(); 
     }
-    else if (m.type === 'ask_secret') { 
-      askSecretForEmail = savedEmail || 'ваш email'; 
-      render(); 
-    }
-    else if (m.type === 'error') { 
-      showToast('❌ ' + m.message); 
-      if(m.message.includes('секретное')) { localStorage.removeItem('bobor_email'); localStorage.removeItem('bobor_secret'); } 
-    }
+    else if (m.type === 'ask_secret') { askSecretForEmail = savedEmail || 'ваш email'; render(); }
+    else if (m.type === 'error') { showToast('❌ ' + m.message); }
     else if (m.type === 'toast') { showToast(m.message); }
     else if (m.type === 'notify') { showToast(m.text); }
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
@@ -167,17 +146,6 @@ function connect() {
     }
   };
 }
-function send(obj) { if(ws && ws.readyState===1) ws.send(JSON.stringify(obj)); else showToast('Нет соединения'); }
-
-function refreshData(btnElement) {
-  send({type:'refresh'});
-  showToast('Данные обновлены');
-  if(btnElement) {
-    btnElement.classList.add('spin');
-    setTimeout(() => btnElement.classList.remove('spin'), 1000);
-  }
-  if(screen === 'admin') send({type:'admin_allusers'});
-}
 
 function drawLogin() {
   const app = document.getElementById('app'); clear(app);
@@ -189,22 +157,28 @@ function drawLogin() {
     c.appendChild(h('div','muted', 'У вашего аккаунта ('+askSecretForEmail+') еще нет секретного слова. Придумайте его:'));
     let newSecret = '';
     c.appendChild(input('Придумайте секретное слово', '', v=>newSecret=v, 'password'));
-    c.appendChild(btn('Сохранить и войти','btn',()=>{
+    const btn1 = h('button', 'btn', 'Сохранить и войти');
+    btn1.onclick = () => {
       localStorage.setItem('bobor_secret', newSecret);
-      send({type:'login', email: askSecretForEmail, pwd: null, secret: newSecret});
-    }));
+      ws.send(JSON.stringify({type:'login', email: askSecretForEmail, pwd: null, secret: newSecret}));
+    };
+    c.appendChild(btn1);
   } else {
     c.appendChild(h('div','muted','Вход в аккаунт'));
     let email = savedEmail || '', pwd='', secret='';
     c.appendChild(input('Email', email, v=>email=v, 'email'));
     c.appendChild(input('Пароль', '', v=>pwd=v, 'password'));
     c.appendChild(input('Секретное слово', '', v=>secret=v, 'password'));
-    c.appendChild(btn('Войти','btn',()=>{
+    const btn2 = h('button', 'btn', 'Войти');
+    btn2.onclick = () => {
       localStorage.setItem('bobor_secret', secret);
-      send({type:'login',email,pwd,secret});
-    }));
+      ws.send(JSON.stringify({type:'login',email,pwd,secret}));
+    };
+    c.appendChild(btn2);
     c.appendChild(h('div','muted','Нет аккаунта? Зарегистрируйся — получишь '+START+' TTFBL.'));
-    c.appendChild(btn('Зарегистрироваться','btn2',()=>{screen='register';render();}));
+    const btn3 = h('button', 'btn2', 'Зарегистрироваться');
+    btn3.onclick = () => { screen='register'; render(); };
+    c.appendChild(btn3);
   }
   app.appendChild(c);
 }
@@ -220,12 +194,16 @@ function drawRegister() {
   c.appendChild(input('Email', '', v=>email=v, 'email'));
   c.appendChild(input('Пароль (мин. 6)', '', v=>pwd=v, 'password'));
   c.appendChild(input('Секретное слово (мин. 2)', '', v=>secret=v, 'password'));
-  c.appendChild(btn('Создать аккаунт','btn',()=>{
+  const btnReg = h('button', 'btn', 'Создать аккаунт');
+  btnReg.onclick = () => {
     localStorage.setItem('bobor_secret', secret);
-    send({type:'register',email,pwd,name,secret});
-  }));
+    ws.send(JSON.stringify({type:'register',email,pwd,name,secret}));
+  };
+  c.appendChild(btnReg);
   c.appendChild(h('div','muted','Уже есть аккаунт?'));
-  c.appendChild(btn('Войти','btn3',()=>{screen='login';render();}));
+  const btnBack = h('button', 'btn3', 'Войти');
+  btnBack.onclick = () => { screen='login'; render(); };
+  c.appendChild(btnBack);
   app.appendChild(c);
 }
 
@@ -244,9 +222,17 @@ function drawDashboard() {
   const onlineCount = allUsers.filter(u => u.online).length;
   right.appendChild(h('span','save', '● ' + onlineCount + ' онлайн'));
   
-  const refreshBtn = btn('🔄','btn3',()=>refreshData(refreshBtn));
+  const refreshBtn = h('button', 'btn3', '🔄');
+  refreshBtn.onclick = () => {
+    ws.send(JSON.stringify({type:'refresh'}));
+    showToast('Данные обновлены');
+    if(screen === 'admin') ws.send(JSON.stringify({type:'admin_allusers'}));
+  };
   right.appendChild(refreshBtn);
-  right.appendChild(btn('Выйти','btn3',()=>send({type:'logout'})));
+  
+  const logoutBtn = h('button', 'btn3', 'Выйти');
+  logoutBtn.onclick = () => ws.send(JSON.stringify({type:'logout'}));
+  right.appendChild(logoutBtn);
   
   top.appendChild(right);
   header.appendChild(top);
@@ -257,13 +243,17 @@ function drawDashboard() {
   if(me.role==='admin') {
     tabs.push(['admin','Админка']);
   }
-  tabs.forEach(([id,label])=>{ nav.appendChild(btn(label, screen===id?'on':'', ()=>{
-    screen=id;
-    if(id==='history'){ historyLoaded=false; send({type:'history'}); }
-    if(id==='admin'){ send({type:'admin_allusers'}); }
-    if(id==='transfer' || id==='users'){ send({type:'get_users'}); }
-    render();
-  })); });
+  tabs.forEach(([id,label])=>{ 
+    const b = h('button', screen===id?'on':'', label);
+    b.onclick = () => {
+      screen=id;
+      if(id==='history'){ historyLoaded=false; ws.send(JSON.stringify({type:'history'})); }
+      if(id==='admin'){ ws.send(JSON.stringify({type:'admin_allusers'})); }
+      if(id==='transfer' || id==='users'){ ws.send(JSON.stringify({type:'get_users'})); }
+      render();
+    };
+    nav.appendChild(b);
+  });
   app.appendChild(nav);
 
   if(screen==='dashboard') drawDashBody(app);
@@ -351,8 +341,15 @@ function drawVaultBody(app) {
   
   const typeRow = h('div','rowline');
   typeRow.appendChild(h('span','muted','Тариф:'));
-  typeRow.appendChild(btn('Базовый', me.vault_type === 'base' ? 'btn2' : 'btn3', () => { send({ type: 'vault_settings', type: 'base' }); }));
-  typeRow.appendChild(btn('Премиум', me.vault_type === 'premium' ? 'btn2' : 'btn3', () => { send({ type: 'vault_settings', type: 'premium' }); }));
+  
+  const baseBtn = h('button', me.vault_type === 'base' ? 'btn2' : 'btn3', 'Базовый');
+  baseBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', type: 'base' }));
+  typeRow.appendChild(baseBtn);
+  
+  const premBtn = h('button', me.vault_type === 'premium' ? 'btn2' : 'btn3', 'Премиум');
+  premBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', type: 'premium' }));
+  typeRow.appendChild(premBtn);
+  
   c.appendChild(typeRow);
   
   c.appendChild(h('div','muted', me.vault_type === 'premium' ? 'Премиум: 10 TTFBL/нед. Блокировка на 30 дней.' : 'Базовый: 5 TTFBL/нед. Снять можно в любой момент.'));
@@ -362,8 +359,12 @@ function drawVaultBody(app) {
   }
 
   const autoRow = h('div','rowline');
-  autoRow.appendChild(h('span','muted','Автопополнение (все переводы на вклад):'));
-  autoRow.appendChild(btn(me.auto_vault ? 'ВКЛ' : 'ВЫКЛ', me.auto_vault ? 'btn2' : 'btn3', () => { send({ type: 'vault_settings', auto: !me.auto_vault }); }));
+  autoRow.appendChild(h('span','muted','Автопополнение:'));
+  
+  const autoBtn = h('button', me.auto_vault ? 'btn2' : 'btn3', me.auto_vault ? 'ВКЛ' : 'ВЫКЛ');
+  autoBtn.onclick = () => ws.send(JSON.stringify({ type: 'vault_settings', auto: !me.auto_vault }));
+  autoRow.appendChild(autoBtn);
+  
   c.appendChild(autoRow);
 
   c.appendChild(h('div','muted','На вкладе:'));
@@ -371,9 +372,15 @@ function drawVaultBody(app) {
   
   let amt='100';
   c.appendChild(input('Сумма TTFBL', amt, v=>amt=v));
-  c.appendChild(btn('Положить на вклад','btn2',()=>send({type:'vault_deposit', amt})));
-  c.appendChild(h('span',null,' '));
-  c.appendChild(btn('Забрать с вклада','btn3',()=>send({type:'vault_withdraw', amt})));
+  
+  const depBtn = h('button', 'btn2', 'Положить на вклад');
+  depBtn.onclick = () => ws.send(JSON.stringify({type:'vault_deposit', amt}));
+  c.appendChild(depBtn);
+  
+  const wdBtn = h('button', 'btn3', 'Забрать с вклада');
+  wdBtn.onclick = () => ws.send(JSON.stringify({type:'vault_withdraw', amt}));
+  c.appendChild(wdBtn);
+  
   app.appendChild(c);
 }
 
@@ -397,7 +404,9 @@ function drawConvertBody(app) {
     if(m>fromBal) p.textContent += ' (недостаточно)';
     c.appendChild(p);
   }
-  c.appendChild(btn('Конвертировать','btn',()=>send({type:'convert', from:st.from, to:st.to, amt:st.amt})));
+  const convBtn = h('button', 'btn', 'Конвертировать');
+  convBtn.onclick = () => ws.send(JSON.stringify({type:'convert', from:st.from, to:st.to, amt:st.amt}));
+  c.appendChild(convBtn);
   app.appendChild(c);
 }
 
@@ -428,10 +437,12 @@ function drawTransferBody(app) {
   c.appendChild(input('Сумма', amt, v=>amt=v));
   c.appendChild(h('div','muted','Доступно в '+cur+': '+fmt(accounts[cur].bal,cur)));
   
-  c.appendChild(btn('Перевести','btn',()=>{
+  const trBtn = h('button', 'btn', 'Перевести');
+  trBtn.onclick = () => {
     if(!toEmail) return showToast('Выбери получателя');
-    send({type:'transfer', toEmail, cur, amt});
-  }));
+    ws.send(JSON.stringify({type:'transfer', toEmail, cur, amt}));
+  };
+  c.appendChild(trBtn);
   app.appendChild(c);
 }
 
@@ -485,7 +496,7 @@ function drawProfileBody(app) {
         canvas.width = w; canvas.height = h;
         ctx.drawImage(img, 0, 0, w, h);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-        send({ type: 'set_avatar', avatar: dataUrl });
+        ws.send(JSON.stringify({ type: 'set_avatar', avatar: dataUrl }));
       };
       img.src = ev.target.result;
     };
@@ -507,11 +518,12 @@ function drawProfileBody(app) {
 
   c.appendChild(h('div','rowline', ''));
   c.lastChild.appendChild(h('span','muted','Тема:'));
-  const themeBtn = btn(document.body.classList.contains('light-theme') ? 'Светлая' : 'Тёмная', 'btn3', () => {
+  const themeBtn = h('button', 'btn3', document.body.classList.contains('light-theme') ? 'Светлая' : 'Тёмная');
+  themeBtn.onclick = () => {
     document.body.classList.toggle('light-theme');
     localStorage.setItem('bobor_theme', document.body.classList.contains('light-theme') ? 'light' : 'dark');
     render();
-  });
+  };
   c.lastChild.appendChild(themeBtn);
 
   c.appendChild(h('h2',null,'Безопасность'));
@@ -519,13 +531,19 @@ function drawProfileBody(app) {
   c.appendChild(input('Старый пароль', '', v=>oldPwd=v, 'password'));
   c.appendChild(input('Новый пароль (мин. 6)', '', v=>newPwd=v, 'password'));
   c.appendChild(input('Секретное слово', '', v=>chgSecret=v, 'password'));
-  c.appendChild(btn('Сменить пароль','btn',()=>send({type:'change_pwd', oldPwd, newPwd, secret: chgSecret})));
+  
+  const chgPwdBtn = h('button', 'btn', 'Сменить пароль');
+  chgPwdBtn.onclick = () => ws.send(JSON.stringify({type:'change_pwd', oldPwd, newPwd, secret: chgSecret}));
+  c.appendChild(chgPwdBtn);
   
   c.appendChild(h('div','muted','Смена секретного слова:'));
   c.appendChild(input('Пароль', '', v=>oldPwd=v, 'password'));
   c.appendChild(input('Старое секретное слово', '', v=>oldSecret=v, 'password'));
   c.appendChild(input('Новое секретное слово', '', v=>chgSecret=v, 'password'));
-  c.appendChild(btn('Сменить секрет','btn2',()=>send({type:'change_secret', pwd: oldPwd, oldSecret, newSecret: chgSecret})));
+  
+  const chgSecBtn = h('button', 'btn2', 'Сменить секрет');
+  chgSecBtn.onclick = () => ws.send(JSON.stringify({type:'change_secret', pwd: oldPwd, oldSecret, newSecret: chgSecret}));
+  c.appendChild(chgSecBtn);
 
   app.appendChild(c);
 }
@@ -547,11 +565,14 @@ function drawHistoryBody(app) {
   filters.style.marginBottom = '10px';
   ['all', 'transfer', 'convert', 'bonus'].forEach(f => {
     const names = { all: 'Все', transfer: 'Переводы', convert: 'Конвертации', bonus: 'Бонусы' };
-    filters.appendChild(btn(names[f], historyFilter === f ? 'btn2' : 'btn3', () => { historyFilter = f; render(); }));
+    const fb = h('button', historyFilter === f ? 'btn2' : 'btn3', names[f]);
+    fb.onclick = () => { historyFilter = f; render(); };
+    filters.appendChild(fb);
   });
   c.appendChild(filters);
 
-  c.appendChild(btn('📥 Скачать CSV','btn3',() => {
+  const csvBtn = h('button', 'btn3', '📥 Скачать CSV');
+  csvBtn.onclick = () => {
     let csv = 'Дата,Описание,Валюта,Сумма,Отправитель,Получатель\n';
     lastHistory.forEach(t => {
       csv += `"${t.date}","${t.descr}","${t.cur}",${fromMinor(t.amt, t.cur)},"${t.from_email||''}","${t.to_email||''}"\n`;
@@ -561,7 +582,8 @@ function drawHistoryBody(app) {
     link.href = URL.createObjectURL(blob);
     link.download = 'bobor_history.csv';
     link.click();
-  }));
+  };
+  c.appendChild(csvBtn);
 
   if(!historyLoaded){ c.appendChild(h('div','muted','Загрузка...')); }
   else {
@@ -597,23 +619,20 @@ function drawAdminBody(app) {
 
   c.appendChild(h('h2',null,'📢 Объявление для всех'));
   
-  const pushInput = document.createElement('input');
-  pushInput.id = 'admin-push-text';
-  pushInput.placeholder = 'Текст уведомления...';
-  pushInput.style.marginBottom = '8px';
-  c.appendChild(pushInput);
-
-  const btnContainer = document.createElement('div');
-  btnContainer.innerHTML = `<button class="btn2" onclick="
-    const txt = document.getElementById('admin-push-text').value;
-    if(!txt) { alert('Введите текст!'); return; }
-    if(ws && ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: 'admin_push_all', text: txt }));
-      alert('Запрос отправлен!');
-      document.getElementById('admin-push-text').value = '';
-    } else { alert('Нет соединения'); }
-  ">Отправить Push всем</button>`;
-  c.appendChild(btnContainer);
+  const pushWrap = document.createElement('div');
+  pushWrap.innerHTML = `
+    <input type="text" id="admin-push-text" placeholder="Текст уведомления..." style="width:100%;padding:12px;border-radius:10px;border:1px solid #26262E;background:#000;color:#fff;margin-bottom:8px;">
+    <button class="btn2" onclick="
+      const txt = document.getElementById('admin-push-text').value;
+      if(!txt) { alert('Введите текст!'); return; }
+      if(ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'admin_push_all', text: txt }));
+        alert('Запрос на рассылку отправлен!');
+        document.getElementById('admin-push-text').value = '';
+      } else { alert('Нет соединения с сервером'); }
+    ">Отправить Push всем</button>
+  `;
+  c.appendChild(pushWrap);
 
   const sorted = adminUsers.slice().sort((a,b)=> a.role===b.role ? a.email.localeCompare(b.email) : (a.role==='admin'?-1:1));
 
@@ -650,7 +669,10 @@ function drawAdminBody(app) {
 
     if (u.banned_until && new Date(u.banned_until) > new Date()) {
       banRow.appendChild(h('span', 'red', 'Забанен до: ' + new Date(u.banned_until).toLocaleString('ru-RU')));
-      banRow.appendChild(btn('Разбанить', 'btn2', () => { send({type:'admin_ban', targetEmail:u.email, minutes:0}); setTimeout(()=>send({type:'admin_allusers'}), 300); }));
+      
+      const unbanBtn = h('button', 'btn2', 'Разбанить');
+      unbanBtn.onclick = () => { ws.send(JSON.stringify({type:'admin_ban', targetEmail:u.email, minutes:0})); setTimeout(()=>ws.send(JSON.stringify({type:'admin_allusers'})), 300); };
+      banRow.appendChild(unbanBtn);
     } else {
       const amtIn = document.createElement('input');
       amtIn.placeholder = 'Время';
@@ -663,14 +685,17 @@ function drawAdminBody(app) {
       banRow.appendChild(h('span', 'muted', 'Бан: '));
       banRow.appendChild(amtIn);
       banRow.appendChild(unitSel);
-      banRow.appendChild(btn('Забанить', 'btn', () => {
+      
+      const banBtn = h('button', 'btn', 'Забанить');
+      banBtn.onclick = () => {
         const val = Number(amtIn.value);
         const mult = Number(unitSel.value);
         if (val > 0) {
-          send({type:'admin_ban', targetEmail:u.email, minutes: val * mult});
-          setTimeout(()=>send({type:'admin_allusers'}), 300);
+          ws.send(JSON.stringify({type:'admin_ban', targetEmail:u.email, minutes: val * mult}));
+          setTimeout(()=>ws.send(JSON.stringify({type:'admin_allusers'})), 300);
         }
-      }));
+      };
+      banRow.appendChild(banBtn);
     }
     block.appendChild(banRow);
 
@@ -685,8 +710,13 @@ function drawAdminBody(app) {
       amtIn.style.cssText='width:100px;padding:6px;font-size:12px;margin:0 4px 0 0;display:inline-block';
       actions.appendChild(amtIn);
       
-      actions.appendChild(btn('+','btn2',()=>{ if(amtIn.value>0) { send({type:'admin_mint', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
-      actions.appendChild(btn('−','btn3',()=>{ if(amtIn.value>0) { send({type:'admin_burn', targetEmail:u.email, cur, amt:amtIn.value}); setTimeout(()=>send({type:'admin_allusers'}), 300); } }));
+      const plusBtn = h('button', 'btn2', '+');
+      plusBtn.onclick = () => { if(amtIn.value>0) { ws.send(JSON.stringify({type:'admin_mint', targetEmail:u.email, cur, amt:amtIn.value})); setTimeout(()=>ws.send(JSON.stringify({type:'admin_allusers'})), 300); } };
+      actions.appendChild(plusBtn);
+      
+      const minusBtn = h('button', 'btn3', '−');
+      minusBtn.onclick = () => { if(amtIn.value>0) { ws.send(JSON.stringify({type:'admin_burn', targetEmail:u.email, cur, amt:amtIn.value})); setTimeout(()=>ws.send(JSON.stringify({type:'admin_allusers'})), 300); } };
+      actions.appendChild(minusBtn);
       
       row.appendChild(actions);
       block.appendChild(row);

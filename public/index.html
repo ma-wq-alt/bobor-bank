@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BANK OF BOBOR PRODUCTION</title>
 <style>
-  body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4}
+  body{margin:0;background:#0B0B0F;color:#F5F5F7;font-family:Arial,sans-serif;font-size:15px;line-height:1.4;transition: background 0.3s, color 0.3s;}
   .wrap{max-width:720px;margin:0 auto;padding:20px}
   .card{background:#15151B;border:1px solid #26262E;border-radius:14px;padding:16px;margin-bottom:12px}
   .card.ttfbl{border-color:rgba(198,255,0,.5);box-shadow:0 0 24px rgba(198,255,0,.12)}
@@ -54,21 +54,18 @@
     width: 24px; height: 24px; cursor: pointer; font-weight: bold;
   }
 
-  /* СВЕТЛАЯ ТЕМА */
   body.light-theme { background:#F0F2F5; color:#1A1A1A; }
   body.light-theme .card { background:#FFFFFF; border-color:#E1E3E8; }
   body.light-theme .muted { color:#65676B; }
   body.light-theme input, body.light-theme select { background:#F8F9FA; color:#1A1A1A; border-color:#E1E3E8; }
   body.light-theme .rowline { border-bottom-color:#E1E3E8; }
   body.light-theme .toast { background:#FFFFFF; border-color:#C6FF00; }
-  
-  /* Фикс невидимых кнопок в светлой теме */
   body.light-theme .btn3 { background: rgba(0,0,0,.08); color: #1A1A1A; }
   body.light-theme nav button { color: #65676B; }
   body.light-theme nav button.on { color: #FF3D00; }
   body.light-theme .formula { background: rgba(0,0,0,.05); }
   body.light-theme .acc-row, body.light-theme .user-block { background: rgba(0,0,0,.03); }
-
+  
   @keyframes spin { 100% { transform: rotate(360deg); } }
   .spin { animation: spin 1s linear infinite; display: inline-block; }
 </style>

@@ -194,6 +194,10 @@ app.post('/api/buy_sub', async (req, res) => {
     const user = await getUser(email);
     if (!user) return res.status(404).json({ success: false, error: 'Пользователь не найден' });
 
+    if (user.ai_sub_until && new Date(user.ai_sub_until) > new Date()) {
+      return res.status(400).json({ success: false, error: 'У вас уже есть активная подписка' });
+    }
+
     const cost = 100;
     if (user.accounts.TTFBL.bal < cost) {
       return res.status(400).json({ success: false, error: 'Недостаточно TTFBL' });
@@ -302,6 +306,10 @@ async function handle(ws, msg) {
 
   // === ПОДПИСКА НА ИИ ===
   if (msg.type === 'buy_sub_ai') {
+    if (me.ai_sub_until && new Date(me.ai_sub_until) > new Date()) {
+      return ws.send(JSON.stringify({ type: 'error', message: 'У вас уже есть активная подписка. Продлить можно будет после её окончания.' }));
+    }
+
     const cost = 100;
     if (me.accounts.TTFBL.bal < cost) {
       return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL. Нужно 100.' }));
@@ -326,7 +334,7 @@ async function handle(ws, msg) {
   if (msg.type === 'cancel_sub_ai') {
     const chk = await db.execute({ sql: 'SELECT ai_sub_bought_at FROM users WHERE email = ?', args: [me.email] });
     const boughtAt = chk.rows[0]?.ai_sub_bought_at;
-    const canRefund = boughtAt && (new Date() - new Date(boughtAt)) < 10 * 60 * 1000; // 10 минут
+    const canRefund = boughtAt && (new Date() - new Date(boughtAt)) < 10 * 60 * 1000;
 
     if (canRefund) {
       await db.execute({ sql: 'UPDATE accounts SET bal = bal + ? WHERE email = ? AND currency = ?', args: [100, me.email, 'TTFBL'] });

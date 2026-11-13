@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors'; // ДОБАВЛЕНО ДЛЯ СВЯЗИ С ИИ
+import cors from 'cors';
 import { WebSocketServer } from 'ws';
 import { createClient } from '@libsql/client';
 import http from 'http';
@@ -168,13 +168,12 @@ async function checkBonusesAndVaults() {
 setInterval(checkBonusesAndVaults, 1000 * 60 * 60); 
 
 const app = express();
-app.use(cors()); // ВАЖНО ДЛЯ СВЯЗИ С ИИ
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// API для получения лимитов (для ИИ)
 app.get('/api/user/limits', async (req, res) => {
   const { email } = req.query;
   if (!email) return res.status(400).json({ error: 'Email обязателен' });
@@ -198,7 +197,6 @@ app.post('/api/push/subscribe', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'DB error' }); }
 });
 
-// API для оплаты подписки из ИИ
 app.post('/api/buy_sub', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ success: false, error: 'Email обязателен' });

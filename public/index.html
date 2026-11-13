@@ -67,7 +67,7 @@
   <div id="app">Подключение...</div>
 </div>
 
-<!-- НОВОЕ МОДАЛЬНОЕ ОКНО ДЛЯ ОПЛАТЫ ИИ -->
+<!-- МОДАЛЬНОЕ ОКНО ДЛЯ ОПЛАТЫ ИИ -->
 <div id="payAiModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 9999;">
   <div style="background: #15151B; padding: 30px; border-radius: 16px; text-align: center; color: white; max-width: 400px; border: 2px solid #C6FF00;">
     <h2 style="color: #C6FF00; margin-bottom: 10px;">🦫 БОБОР-AI</h2>
@@ -167,7 +167,6 @@ function connect() {
   };
 }
 
-// ПРОВЕРКА ССЫЛКИ НА ОПЛАТУ ИИ
 window.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('pay_ai') === 'true') {

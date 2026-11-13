@@ -39,7 +39,7 @@ function genNum() { return 'BOB' + Math.floor(1000000000 + Math.random() * 89999
 
 async function initSchema() {
   await db.batch([
-    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT, last_vault_date TEXT, avatar TEXT)`,
+    `CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, pwd TEXT NOT NULL, name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', display_name TEXT, secret_word TEXT, last_bonus_date TEXT, last_vault_date TEXT, avatar TEXT, ai_sub_until TEXT, ai_free_left INTEGER DEFAULT 20)`,
     `CREATE TABLE IF NOT EXISTS accounts (email TEXT NOT NULL, currency TEXT NOT NULL, num TEXT NOT NULL, bal INTEGER NOT NULL DEFAULT 0, vault_bal INTEGER DEFAULT 0, PRIMARY KEY (email, currency))`,
     `CREATE TABLE IF NOT EXISTS txs (id INTEGER PRIMARY KEY AUTOINCREMENT, from_email TEXT, to_email TEXT, cur TEXT NOT NULL, amt INTEGER NOT NULL, fee INTEGER NOT NULL DEFAULT 0, descr TEXT NOT NULL, date TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS push_subscriptions (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`,
@@ -51,6 +51,8 @@ async function initSchema() {
   try { await db.execute('ALTER TABLE users ADD COLUMN last_bonus_date TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN last_vault_date TEXT'); } catch(e) {}
   try { await db.execute('ALTER TABLE users ADD COLUMN avatar TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN ai_sub_until TEXT'); } catch(e) {}
+  try { await db.execute('ALTER TABLE users ADD COLUMN ai_free_left INTEGER DEFAULT 20'); } catch(e) {}
   try { await db.execute('ALTER TABLE accounts ADD COLUMN vault_bal INTEGER DEFAULT 0'); } catch(e) {}
 
   try {
@@ -76,7 +78,7 @@ async function initSchema() {
 async function createUser(email, pwd, name, role, display_name, secret_word) {
   const now = new Date().toISOString();
   await db.execute({
-    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date, last_vault_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    sql: 'INSERT INTO users (email, pwd, name, role, display_name, secret_word, last_bonus_date, last_vault_date, ai_free_left) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 20)',
     args: [email, pwd, name, role, display_name, secret_word, now, now],
   });
   for (const c of CUR) {
@@ -95,7 +97,7 @@ async function getUser(email) {
   const accs = await db.execute({ sql: 'SELECT * FROM accounts WHERE email = ?', args: [u.email] });
   const accounts = {};
   for (const a of accs.rows) accounts[a.currency] = { num: a.num, bal: Number(a.bal), vault_bal: Number(a.vault_bal || 0) };
-  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, avatar: u.avatar };
+  return { email: u.email, name: u.name, display_name: u.display_name || u.name, role: u.role, banned_until: u.banned_until, accounts, has_secret: !!u.secret_word, pwd: u.pwd, secret: u.secret_word, avatar: u.avatar, ai_sub_until: u.ai_sub_until, ai_free_left: u.ai_free_left };
 }
 
 const clients = new Set();
@@ -262,6 +264,37 @@ async function handle(ws, msg) {
     if (me.banned_until && new Date(me.banned_until) > new Date()) {
       return ws.send(JSON.stringify({ type: 'error', message: 'Вы забанены до ' + new Date(me.banned_until).toLocaleString('ru-RU') }));
     }
+  }
+
+  // === ПОДПИСКА НА ИИ ===
+  if (msg.type === 'buy_sub_ai') {
+    const cost = 10000; // 100 TTFBL
+    if (me.accounts.TTFBL.bal < cost) {
+      return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL. Нужно 100.' }));
+    }
+
+    await db.execute({ sql: 'UPDATE accounts SET bal = bal - ? WHERE email = ? AND currency = ?', args: [cost, me.email, 'TTFBL'] });
+    await db.execute({ sql: 'INSERT INTO txs (from_email, to_email, cur, amt, fee, descr, date) VALUES (?, ?, ?, ?, 0, ?, ?)', args: [me.email, null, 'TTFBL', cost, 'Оплата подписки на ИИ (30 дней)', new Date().toLocaleString('ru-RU')] });
+
+    const currentDate = await db.execute({ sql: 'SELECT ai_sub_until FROM users WHERE email = ?', args: [me.email] });
+    let baseDate = new Date();
+    const dbDate = currentDate.rows[0]?.ai_sub_until;
+    if (dbDate && new Date(dbDate) > new Date()) {
+      baseDate = new Date(dbDate);
+    }
+    baseDate.setDate(baseDate.getDate() + 30);
+    const newUntil = baseDate.toISOString();
+
+    await db.execute({ sql: 'UPDATE users SET ai_sub_until = ? WHERE email = ?', args: [newUntil, me.email] });
+    
+    await pushStateTo(ws, ws.userEmail);
+    return ws.send(JSON.stringify({ type: 'toast', message: '✅ Подписка на ИИ оплачена и активна 30 дней!' }));
+  }
+
+  if (msg.type === 'cancel_sub_ai') {
+    await db.execute({ sql: 'UPDATE users SET ai_sub_until = NULL WHERE email = ?', args: [me.email] });
+    await pushStateTo(ws, ws.userEmail);
+    return ws.send(JSON.stringify({ type: 'toast', message: '✅ Подписка отменена.' }));
   }
 
   if (msg.type === 'change_pwd') {

@@ -268,7 +268,7 @@ async function handle(ws, msg) {
 
   // === ПОДПИСКА НА ИИ ===
   if (msg.type === 'buy_sub_ai') {
-    const cost = 10000; // 100 TTFBL
+    const cost = 100; // 100 TTFBL (исправлено)
     if (me.accounts.TTFBL.bal < cost) {
       return ws.send(JSON.stringify({ type: 'error', message: 'Недостаточно TTFBL. Нужно 100.' }));
     }

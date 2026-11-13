@@ -66,6 +66,20 @@
   <div id="err"></div>
   <div id="app">Подключение...</div>
 </div>
+
+<!-- МОДАЛЬНОЕ ОКНО ДЛЯ ОПЛАТЫ ИИ -->
+<div id="payAiModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 9999;">
+  <div style="background: #15151B; padding: 30px; border-radius: 16px; text-align: center; color: white; max-width: 400px; border: 2px solid #C6FF00;">
+    <h2 style="color: #C6FF00; margin-bottom: 10px;">🦫 БОБОР-AI</h2>
+    <p>Вы хотите оплатить подписку на нейросеть?</p>
+    <h1 style="margin: 20px 0; color: #C6FF00;">100 TTFBL</h1>
+    <p style="font-size: 12px; color: #aaa; margin-bottom: 20px;">С вашего счета будет списано 100 TTFBL. Подписка активируется на 30 дней.</p>
+    
+    <button onclick="confirmPayAi()" style="background: #C6FF00; color: black; padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 10px;">Оплатить</button>
+    <button onclick="closePayAi()" style="background: transparent; border: 1px solid #555; color: white; padding: 12px 20px; border-radius: 8px; cursor: pointer;">Отмена</button>
+  </div>
+</div>
+
 <script>
 const TTFBL_PER_RUB = 10, RUB_PER_TTFBL = 0.1;
 const FIAT = { RUB:1, USD:90, TRY:2.8, KZT:0.2 };
@@ -151,6 +165,40 @@ function connect() {
       }
     }
   };
+}
+
+// ПРОВЕРКА ССЫЛКИ НА ОПЛАТУ ИИ
+window.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('pay_ai') === 'true') {
+    if (savedEmail) {
+      document.getElementById('payAiModal').style.display = 'flex';
+    } else {
+      showToast('Войдите в Банк, чтобы оплатить ИИ');
+    }
+  }
+});
+
+async function confirmPayAi() {
+  try {
+    const res = await fetch('/api/buy_sub', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: savedEmail })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('✅ Подписка активирована! Возвращаемся в ИИ...');
+      window.location.href = 'https://bobor-ai.onrender.com';
+    } else {
+      alert('❌ Ошибка: ' + data.error);
+    }
+  } catch (err) { alert('Ошибка соединения'); }
+}
+
+function closePayAi() {
+  window.history.replaceState({}, document.title, window.location.pathname);
+  document.getElementById('payAiModal').style.display = 'none';
 }
 
 function drawLogin() {

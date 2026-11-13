@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors'; // ДОБАВЛЕНО ДЛЯ СВЯЗИ С ИИ
 import { WebSocketServer } from 'ws';
 import { createClient } from '@libsql/client';
 import http from 'http';
@@ -167,10 +168,22 @@ async function checkBonusesAndVaults() {
 setInterval(checkBonusesAndVaults, 1000 * 60 * 60); 
 
 const app = express();
+app.use(cors()); // ВАЖНО ДЛЯ СВЯЗИ С ИИ
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+
+// API для получения лимитов (для ИИ)
+app.get('/api/user/limits', async (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: 'Email обязателен' });
+  try {
+    const user = await getUser(email);
+    if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+    res.json({ ai_free_left: user.ai_free_left, ai_sub_until: user.ai_sub_until });
+  } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
+});
 
 app.post('/api/push/subscribe', async (req, res) => {
   const { email, subscription } = req.body;
@@ -304,7 +317,6 @@ async function handle(ws, msg) {
     }
   }
 
-  // === ПОДПИСКА НА ИИ ===
   if (msg.type === 'buy_sub_ai') {
     if (me.ai_sub_until && new Date(me.ai_sub_until) > new Date()) {
       return ws.send(JSON.stringify({ type: 'error', message: 'У вас уже есть активная подписка. Продлить можно будет после её окончания.' }));

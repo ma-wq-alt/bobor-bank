@@ -58,7 +58,6 @@
 </head>
 <body>
 <div class="wrap">
-  <!-- БАННЕР ОБЪЯВЛЕНИЙ -->
   <div id="announcement-banner" class="announcement-banner">
     <span id="announcement-text"></span>
     <button class="announcement-close" onclick="document.getElementById('announcement-banner').style.display='none'">×</button>
@@ -142,15 +141,13 @@ function connect() {
     else if (m.type === 'history') { lastHistory = m.txs; historyLoaded = true; render(); }
     else if (m.type === 'admin_allusers') { adminUsers = m.users; render(); }
     else if (m.type === 'users_list') { allUsers = m.users; render(); }
-    
-    // ОБРАБОТКА БАННЕРА
     else if (m.type === 'announcement') {
       const banner = document.getElementById('announcement-banner');
       const text = document.getElementById('announcement-text');
       if(banner && text) { 
         text.textContent = '📢 ' + m.text; 
         banner.style.display = 'block'; 
-        window.scrollTo({ top: 0, behavior: 'smooth' }); // Скроллим наверх к баннеру
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     }
   };
@@ -506,6 +503,38 @@ function drawProfileBody(app) {
     render();
   };
   c.lastChild.appendChild(themeBtn);
+
+  // === МОИ ПОДПИСКИ ===
+  c.appendChild(h('h2',null,'Мои подписки'));
+  
+  const subBlock = h('div', 'user-block');
+  subBlock.style.border = '1px solid #C6FF00';
+  
+  const subActive = me.ai_sub_until && new Date(me.ai_sub_until) > new Date();
+  const subDate = subActive ? new Date(me.ai_sub_until).toLocaleDateString('ru-RU') : 'Нет активной подписки';
+  
+  subBlock.appendChild(h('div', null, '🤖 БОБОР-AI (Нейросеть)'));
+  subBlock.appendChild(h('div', 'muted', 'Статус: ' + (subActive ? 'Активна до ' + subDate : 'Не активна')));
+  
+  const btnWrap = h('div');
+  btnWrap.style.marginTop = '8px';
+  
+  const buyBtn = h('button', 'btn2', 'Оплатить / Продлить (100 TTFBL)');
+  buyBtn.onclick = () => ws.send(JSON.stringify({ type: 'buy_sub_ai' }));
+  btnWrap.appendChild(buyBtn);
+  
+  if (subActive) {
+    const cancelBtn = h('button', 'btn3', 'Отменить');
+    cancelBtn.onclick = () => {
+      if(confirm('Вы уверены, что хотите отменить подписку?')) {
+        ws.send(JSON.stringify({ type: 'cancel_sub_ai' }));
+      }
+    };
+    btnWrap.appendChild(cancelBtn);
+  }
+  
+  subBlock.appendChild(btnWrap);
+  c.appendChild(subBlock);
 
   c.appendChild(h('h2',null,'Безопасность'));
   let oldPwd = '', newPwd = '', chgSecret = '', oldSecret = '';

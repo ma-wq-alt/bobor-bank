@@ -519,11 +519,11 @@ function drawProfileBody(app) {
   const btnWrap = h('div');
   btnWrap.style.marginTop = '8px';
   
-  const buyBtn = h('button', 'btn2', 'Оплатить / Продлить (100 TTFBL)');
-  buyBtn.onclick = () => ws.send(JSON.stringify({ type: 'buy_sub_ai' }));
-  btnWrap.appendChild(buyBtn);
-  
-  if (subActive) {
+  if (!subActive) {
+    const buyBtn = h('button', 'btn2', 'Оплатить подписку (100 TTFBL)');
+    buyBtn.onclick = () => ws.send(JSON.stringify({ type: 'buy_sub_ai' }));
+    btnWrap.appendChild(buyBtn);
+  } else {
     const cancelBtn = h('button', 'btn3', 'Отменить');
     cancelBtn.onclick = () => {
       if(confirm('Вы уверены, что хотите отменить подписку?')) {
